@@ -15,6 +15,9 @@ export interface Store {
   getConfig(): Promise<Config | null>;
   setConfig(c: Config): Promise<void>;
   getAdminHash(): Promise<string | null>;
+  /** Tek seferlik veri güncellemelerinin kaydı */
+  getMigrations(): Promise<string[]>;
+  addMigration(name: string): Promise<void>;
   setAdminHash(h: string): Promise<void>;
   listBookings(): Promise<Booking[]>;
   upsertBooking(b: Booking): Promise<void>;
@@ -52,6 +55,8 @@ class PgStore implements Store {
   setConfig(c: Config) { return this.kvSet('config', c); }
   async getAdminHash() { return (await this.kvGet<{ h: string }>('admin'))?.h ?? null; }
   setAdminHash(h: string) { return this.kvSet('admin', { h }); }
+  async getMigrations() { return (await this.kvGet<string[]>('migrations')) ?? []; }
+  async addMigration(name: string) { await this.kvSet('migrations', [...(await this.getMigrations()), name]); }
   async listBookings() {
     const r = await this.pool.query('select data from bookings order by data->>\'date\', data->>\'time\'');
     return r.rows.map((x) => x.data as Booking);
@@ -79,7 +84,7 @@ class PgStore implements Store {
 /* ---------------- JSON dosyası (yerel geliştirme) ---------------- */
 class FileStore implements Store {
   file: string;
-  data: { config: Config | null; admin: string | null; bookings: Record<string, Booking>; customers?: Record<string, CustomerRec> } = { config: null, admin: null, bookings: {}, customers: {} };
+  data: { config: Config | null; admin: string | null; bookings: Record<string, Booking>; customers?: Record<string, CustomerRec>; migrations?: string[] } = { config: null, admin: null, bookings: {}, customers: {}, migrations: [] };
   constructor(file: string) { this.file = file; }
   async init() {
     try {
@@ -96,6 +101,8 @@ class FileStore implements Store {
   async setConfig(c: Config) { this.data.config = c; this.save(); }
   async getAdminHash() { return this.data.admin; }
   async setAdminHash(h: string) { this.data.admin = h; this.save(); }
+  async getMigrations() { return this.data.migrations ?? []; }
+  async addMigration(name: string) { (this.data.migrations ??= []).push(name); this.save(); }
   async listBookings() { return Object.values(this.data.bookings); }
   async upsertBooking(b: Booking) { this.data.bookings[b.id] = b; this.save(); }
   async deleteBooking(id: string) { delete this.data.bookings[id]; this.save(); }

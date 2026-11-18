@@ -1,8 +1,8 @@
 import { ask, notify } from '../../components/dialog';
 import { useState } from 'react';
-import { MessageCircle, Pencil, Phone, Plus, Trash2 } from 'lucide-react';
+import { KeyRound, MessageCircle, Pencil, Phone, Plus, Trash2 } from 'lucide-react';
 import { uid, update, useStore } from '../../data/store';
-import { eur, telLink, todayIso, waLink } from '../../lib/format';
+import { appUrl, eur, telLink, todayIso, waLink } from '../../lib/format';
 import type { Driver } from '../../types';
 import { Field, Modal, PageHead, Toggle, toast } from './ui';
 
@@ -13,9 +13,16 @@ export function Drivers() {
   const [edit, setEdit] = useState<Driver | null>(null);
   const month = todayIso().slice(0, 7);
 
-  const save = () => {
+  const sendLogin = (d: Driver) => {
+    const msg = `Merhaba ${d.name.split(' ')[0]}, ${s.settings.companyName} şoför ekranı giriş bilgileriniz:\n\nAdres: ${appUrl('/surucu')}\nAdınız: ${d.name}\nPIN: ${d.pin}\n\nAdresi telefonunuzda açıp "Ana ekrana ekle" derseniz uygulama gibi kullanabilirsiniz.`;
+    window.open(waLink(d.phone, msg), '_blank', 'noopener');
+  };
+
+  const save = async () => {
     if (!edit) return;
     if (!edit.name.trim() || !/^\d{4,6}$/.test(edit.pin)) return notify('Ad ve 4–6 haneli PIN zorunlu.');
+    const isNew = !s.drivers.some((d) => d.id === edit.id);
+    const saved = { ...edit, name: edit.name.trim() };
     update((x) => {
       const i = x.drivers.findIndex((d) => d.id === edit.id);
       if (i >= 0) x.drivers[i] = edit;
@@ -23,11 +30,21 @@ export function Drivers() {
     });
     toast('Şoför kaydedildi');
     setEdit(null);
+    if (isNew && saved.phone.replace(/\D/g, '').length >= 7 && (await ask(`${saved.name} için giriş bilgileri (adres ve PIN) WhatsApp’tan gönderilsin mi?`, { okText: 'Gönder' }))) {
+      sendLogin(saved);
+    }
   };
 
   return (
     <>
       <PageHead title="Şoförler" desc="Şoförler kendi telefonlarından /surucu adresine PIN ile girer ve sadece kendi işlerini görür." actions={<button className="abtn abtn-primary" onClick={() => setEdit(empty())}><Plus size={16} /> Şoför ekle</button>} />
+      {s.drivers.length === 0 && (
+        <div className="apanel empty-state">
+          <b>Henüz şoför eklenmedi.</b>
+          <p className="muted">Şoför ekleyin, kendisine verdiğiniz PIN ile telefonundan şoför ekranına girsin. Eklerken giriş bilgilerini WhatsApp’tan tek tuşla gönderebilirsiniz.</p>
+          <button className="abtn abtn-primary" onClick={() => setEdit(empty())}><Plus size={16} /> İlk şoförü ekle</button>
+        </div>
+      )}
       <div className="dgrid">
         {s.drivers.map((d) => {
           const mine = s.bookings.filter((b) => b.driverId === d.id);
@@ -54,6 +71,7 @@ export function Drivers() {
               <div className="row-gap">
                 <a className="aicon" href={telLink(d.phone)} aria-label="Ara"><Phone size={16} /></a>
                 <a className="aicon" href={waLink(d.phone)} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp"><MessageCircle size={16} /></a>
+                <button className="aicon" onClick={() => sendLogin(d)} aria-label="Giriş bilgilerini gönder" title="Giriş bilgilerini WhatsApp’tan gönder"><KeyRound size={16} /></button>
                 <span className="grow" />
                 <button className="aicon" aria-label="Sil" onClick={async () => (await ask(`${d.name} silinsin mi?`, { danger: true, okText: 'Sil' })) && update((x) => { x.drivers = x.drivers.filter((y) => y.id !== d.id); x.bookings.forEach((b) => { if (b.driverId === d.id && b.status !== 'completed') b.driverId = undefined; }); })}><Trash2 size={16} /></button>
                 <button className="abtn abtn-sm" onClick={() => setEdit({ ...d })}><Pencil size={14} /> Düzenle</button>

@@ -24,6 +24,34 @@ const ACTIVE: BookingStatus[] = ['on_way', 'arrived', 'onboard'];
 
 const state = (): AppState => ({ version: 3, ...config, bookings: [...bookings.values()], live, customers: [...customers.values()].map(publicCustomer) });
 
+/** Tek seferlik veri güncellemeleri (her biri yalnızca bir kez çalışır) */
+async function runMigrations() {
+  const done = await store.getMigrations();
+  if (!done.includes('2026-11-clear-demo')) {
+    // Hazır örnek rezervasyonları ve örnek şoförleri kaldır (gerçek kayıtlara dokunmaz)
+    const demoDrivers = new Set(['d1', 'd2', 'd3']);
+    let nb = 0;
+    for (const b of [...bookings.values()]) {
+      if (b.id.startsWith('demo-')) {
+        bookings.delete(b.id);
+        await store.deleteBooking(b.id);
+        nb++;
+      } else if (b.driverId && demoDrivers.has(b.driverId)) {
+        const nextStatus = ['assigned', 'on_way', 'arrived', 'onboard'].includes(b.status) ? 'confirmed' : b.status;
+        const next = { ...b, driverId: undefined, status: nextStatus };
+        bookings.set(b.id, next);
+        await store.upsertBooking(next);
+      }
+    }
+    const before = config.drivers.length;
+    config.drivers = config.drivers.filter((d) => !(demoDrivers.has(d.id) && d.pin === '1234'));
+    for (const id of demoDrivers) delete live[id];
+    await store.setConfig(config);
+    await store.addMigration('2026-11-clear-demo');
+    console.log(`[migration] örnek veriler temizlendi: ${nb} rezervasyon, ${before - config.drivers.length} şoför`);
+  }
+}
+
 async function boot() {
   await store.init();
   const saved = await store.getConfig();
@@ -36,6 +64,8 @@ async function boot() {
     const seed = createSeed();
     const { bookings: demo, live: _l, version: _v, customers: _c, ...rest } = seed;
     config = rest;
+    // Örnek şoförler yalnızca demo kurulumunda eklenir; gerçek kurulumda panelden oluşturulur
+    if (process.env.SEED_DEMO !== '1') config.drivers = [];
     await store.setConfig(config);
     if (process.env.SEED_DEMO === '1') {
       for (const b of demo) {
@@ -45,6 +75,7 @@ async function boot() {
     }
     console.log('[boot] başlangıç verileri yüklendi');
   }
+  await runMigrations();
   if (!(await store.getAdminHash())) {
     await store.setAdminHash(hashPassword(process.env.ADMIN_PASSWORD || 'admin123'));
     if (!process.env.ADMIN_PASSWORD) console.warn('[boot] ADMIN_PASSWORD yok, panel şifresi: admin123');

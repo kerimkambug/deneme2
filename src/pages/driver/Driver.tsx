@@ -21,6 +21,7 @@ const NEXT: Partial<Record<BookingStatus, { to: BookingStatus; label: string }>>
 
 function Login({ onOk }: { onOk: (id: string) => void }) {
   const [drivers, setDrivers] = useState<{ id: string; name: string }[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [id, setId] = useState('');
   const [pin, setPin] = useState('');
   const [err, setErr] = useState('');
@@ -28,6 +29,7 @@ function Login({ onOk }: { onOk: (id: string) => void }) {
   useEffect(() => {
     driverList().then((l) => {
       setDrivers(l);
+      setLoaded(true);
       setId((cur) => cur || l[0]?.id || '');
     });
   }, []);
@@ -50,6 +52,7 @@ function Login({ onOk }: { onOk: (id: string) => void }) {
             {drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
         </label>
+        {loaded && drivers.length === 0 && <p className="aerr">Henüz şoför hesabı yok. Yöneticiniz panelden şoför ekleyip size PIN vermeli.</p>}
         <label className="afld">
           <span>PIN</span>
           <input inputMode="numeric" type="password" autoComplete="one-time-code" value={pin} onChange={(e) => { setPin(e.target.value.replace(/\D/g, '')); setErr(''); }} maxLength={6} />

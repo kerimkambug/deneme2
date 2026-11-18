@@ -1807,3 +1807,9 @@ body:has(.drv) {
     grid-template-columns: 1fr auto;
   }
 }
+.empty-state {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding: 26px;
+}

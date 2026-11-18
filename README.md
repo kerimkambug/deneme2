@@ -10,7 +10,7 @@ Havalimanı / otel transferi yapan VIP taşımacılık firmaları için hazırla
 | `/panel` | Patron / ofis | Özet, sevk planı (sürükle-bırak), rezervasyonlar, araçlar, bölgeler & fiyatlar, şoförler, site içeriği, ayarlar |
 | `/surucu` | Şoför | Günün işleri, tek tuşla durum güncelleme, tam ekran isim tabelası, navigasyon, tahsilat |
 
-Demo girişleri: panel şifresi `admin123`, şoför PIN'i `1234`.
+Demo (tarayıcı) sürümü girişleri: panel şifresi `admin123`, şoför PIN'i `1234`. Sunucu kurulumunda panel şifresi `ADMIN_PASSWORD` ile belirlenir; şoförler **Panel → Şoförler** bölümünden eklenir ve giriş bilgileri WhatsApp'tan iletilebilir.
 
 ## Konum sistemi
 - Müşteri **Nereden / Nereye** için otel, adres veya havalimanı arar (OpenStreetMap / Photon), **“Konumumu kullan”** ile GPS konumunu alır veya **haritada iğneyle** işaretler (Leaflet + OpenStreetMap altlık). API anahtarı gerekmez.
@@ -49,7 +49,7 @@ Sunucu modunda veriler Render'daki PostgreSQL'de durur; müşteri, patron ve şo
 | `DATABASE_URL` | Render veritabanından otomatik gelir |
 | `SECRET` | Oturum imzalama anahtarı (otomatik üretilir) |
 | `ADMIN_PASSWORD` | İlk panel şifresi (sonra panelden değiştirilebilir) |
-| `SEED_DEMO` | `1` ise ilk açılışta örnek rezervasyonlar yüklenir |
+| `SEED_DEMO` | `1` ise ilk açılışta örnek şoför ve rezervasyonlar yüklenir (gerçek kurulumda eklemeyin) |
 
 Ücretsiz planda servis 15 dk kullanılmazsa uyur (ilk açılış ~30-50 sn) ve ücretsiz veritabanı 30 gün sonra silinir. Canlı kullanım için Starter servis + Basic veritabanı önerilir.
 
