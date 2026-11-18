@@ -1,38 +1,54 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { NavLink, Outlet, Link } from 'react-router-dom';
-import { LayoutDashboard, CalendarClock, ListChecks, Car, Tags, UserRound, PanelsTopLeft, Settings, LogOut, ExternalLink, Menu, X, Lock } from 'lucide-react';
-import { useStore } from '../../data/store';
+import { LayoutDashboard, CalendarClock, ListChecks, Car, Tags, UserRound, PanelsTopLeft, Settings, LogOut, ExternalLink, Menu, X, Lock, Loader2, WifiOff } from 'lucide-react';
+import { REMOTE, adminLogin, hasToken, logout as storeLogout, useScope, useStatus, useStore } from '../../data/store';
+import { toast } from './ui';
 import { Brand } from '../../components/Brand';
 
 const KEY = 'vip:admin';
+const DEMO = import.meta.env.VITE_DEMO === '1';
 
 export function useAdminAuth() {
   const [ok, setOk] = useState(() => {
+    if (REMOTE) return hasToken('admin');
     try {
       return sessionStorage.getItem(KEY) === '1';
     } catch {
       return false;
     }
   });
-  const login = () => {
-    try { sessionStorage.setItem(KEY, '1'); } catch { /* yok say */ }
+  const status = useStatus();
+  useEffect(() => {
+    // Sunucu oturumu reddettiyse giriş ekranına dön
+    if (REMOTE && status === 'error' && !hasToken('admin')) setOk(false);
+  }, [status]);
+  const login = async (pw: string) => {
+    const err = await adminLogin(pw);
+    if (err) return err;
+    if (!REMOTE) {
+      try { sessionStorage.setItem(KEY, '1'); } catch { /* yok say */ }
+    }
     setOk(true);
+    return null;
   };
   const logout = () => {
+    storeLogout('admin');
     try { sessionStorage.removeItem(KEY); } catch { /* yok say */ }
     setOk(false);
   };
   return { ok, login, logout };
 }
 
-function Login({ onOk }: { onOk: () => void }) {
-  const pw = useStore((s) => s.settings.adminPassword);
+function Login({ onLogin }: { onLogin: (pw: string) => Promise<string | null> }) {
   const [v, setV] = useState('');
-  const [err, setErr] = useState(false);
-  const submit = (e: FormEvent) => {
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (v === pw) onOk();
-    else setErr(true);
+    setBusy(true);
+    const r = await onLogin(v);
+    setBusy(false);
+    if (r) setErr(r);
   };
   return (
     <div className="alogin">
@@ -42,11 +58,11 @@ function Login({ onOk }: { onOk: () => void }) {
         <p>Devam etmek için şifrenizi girin.</p>
         <label className="afld">
           <span>Şifre</span>
-          <input type="password" autoFocus value={v} onChange={(e) => { setV(e.target.value); setErr(false); }} />
+          <input type="password" autoFocus value={v} onChange={(e) => { setV(e.target.value); setErr(''); }} />
         </label>
-        {err && <p className="aerr">Şifre hatalı.</p>}
-        <button className="abtn abtn-primary"><Lock size={16} /> Giriş Yap</button>
-        <small className="muted">Demo şifresi: <code>admin123</code></small>
+        {err && <p className="aerr">{err}</p>}
+        <button className="abtn abtn-primary" disabled={busy}>{busy ? <Loader2 size={16} className="spin" /> : <Lock size={16} />} Giriş Yap</button>
+        {(DEMO || !REMOTE) && <small className="muted">Demo şifresi: <code>admin123</code></small>}
         <Link to="/" className="alogin-back">← Siteye dön</Link>
       </form>
     </div>
@@ -68,7 +84,28 @@ export function AdminLayout() {
   const { ok, login, logout } = useAdminAuth();
   const newCount = useStore((s) => s.bookings.filter((b) => b.status === 'new').length);
   const [open, setOpen] = useState(false);
-  if (!ok) return <Login onOk={login} />;
+  useScope(ok ? { kind: 'admin' } : null);
+  const status = useStatus();
+  const [loadedOnce, setLoadedOnce] = useState(!REMOTE);
+  useEffect(() => {
+    if (status === 'ready' && ok) setLoadedOnce(true);
+  }, [status, ok]);
+  useEffect(() => {
+    const on = (e: Event) => toast((e as CustomEvent<string>).detail || 'Kaydedilemedi');
+    window.addEventListener('vip:error', on);
+    return () => window.removeEventListener('vip:error', on);
+  }, []);
+  if (!ok) return <Login onLogin={login} />;
+  if (!loadedOnce) {
+    return (
+      <div className="alogin">
+        <div className="alogin-card center">
+          {status === 'error' ? <WifiOff size={26} /> : <Loader2 size={26} className="spin" />}
+          <p>{status === 'error' ? 'Sunucuya ulaşılamadı. Bağlantınızı kontrol edip sayfayı yenileyin.' : 'Veriler yükleniyor…'}</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={`admin ${open ? 'nav-open' : ''}`}>
       <aside className="aside">

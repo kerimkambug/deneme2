@@ -4,6 +4,7 @@ import { AlertTriangle, CalendarCheck, Inbox, TrendingUp, Wallet, ArrowRight, Pl
 import { useStore } from '../../data/store';
 import { dateLabel, eur, todayIso } from '../../lib/format';
 import { BookingDetail, routeText } from './BookingDetail';
+import { LiveMap } from '../../components/LiveMap';
 import { PageHead, StatusBadge } from './ui';
 
 export function Dashboard() {
@@ -19,6 +20,9 @@ export function Dashboard() {
   const revenue = live.filter((b) => b.date.startsWith(month)).reduce((a, b) => a + (b.price || 0), 0);
   const cash = s.bookings.filter((b) => b.date === today).reduce((a, b) => a + (b.cashCollected ?? 0), 0);
 
+  const liveMarkers = Object.entries(s.live)
+    .filter(([, l]) => Date.now() - Date.parse(l.at) < 3 * 60e3)
+    .map(([id, l]) => ({ id, kind: 'car' as const, lat: l.lat, lng: l.lng, heading: l.heading, label: s.drivers.find((d) => d.id === id)?.name.split(' ')[0] }));
   const kpis = [
     { icon: CalendarCheck, label: 'Bugünkü transfer', value: todays.length },
     { icon: Inbox, label: 'Onay bekleyen', value: newOnes.length, warn: newOnes.length > 0 },
@@ -89,6 +93,11 @@ export function Dashboard() {
 
         <section className="apanel">
           <div className="apanel-h"><h3>Şoförler şu an</h3><Link to="/panel/soforler">Yönet</Link></div>
+          {liveMarkers.length > 0 && (
+            <div className="dash-map">
+              <LiveMap center={liveMarkers[0]} markers={liveMarkers} height={300} />
+            </div>
+          )}
           <ul className="drv-live">
             {s.drivers.filter((d) => d.active).map((d) => {
               const cur = todays.find((b) => b.driverId === d.id && ['on_way', 'arrived', 'onboard'].includes(b.status));
@@ -96,6 +105,7 @@ export function Dashboard() {
               return (
                 <li key={d.id}>
                   <span className={`dot-live ${cur ? 'busy' : 'free'}`} />
+                  {s.live[d.id] && <span className="pill" title="Canlı konum paylaşıyor">● Canlı</span>}
                   <div>
                     <b>{d.name}</b>
                     <small>{d.plate}</small>

@@ -1,0 +1,410 @@
+import fs from 'node:fs';
+import http from 'node:http';
+import path from 'node:path';
+import express, { type Request, type Response, type NextFunction } from 'express';
+import { WebSocketServer, WebSocket } from 'ws';
+import { createSeed } from '../src/data/seed';
+import { quote } from '../src/lib/pricing';
+import { haversineKm, resolveZone } from '../src/lib/geo';
+import type { AppState, Booking, BookingStatus, Driver, LiveLoc } from '../src/types';
+import { CONFIG_KEYS, createStore, type Config } from './db';
+import { checkPassword, clearFails, hashPassword, noteFail, rateLimited, sign, verify, type TokenData } from './auth';
+
+const PORT = Number(process.env.PORT) || 8080;
+const DIST = path.resolve(process.env.DIST_DIR || 'dist');
+const store = createStore();
+
+/* ======================= Bellek içi durum ======================= */
+let config: Config;
+const bookings = new Map<string, Booking>();
+const live: Record<string, LiveLoc> = {};
+const ACTIVE: BookingStatus[] = ['on_way', 'arrived', 'onboard'];
+
+const state = (): AppState => ({ version: 3, ...config, bookings: [...bookings.values()], live });
+
+async function boot() {
+  await store.init();
+  const saved = await store.getConfig();
+  if (saved) {
+    const seed = createSeed();
+    config = { ...seed, ...saved, settings: { ...seed.settings, ...saved.settings } } as Config;
+    for (const b of await store.listBookings()) bookings.set(b.id, b);
+  } else {
+    const seed = createSeed();
+    const { bookings: demo, live: _l, version: _v, ...rest } = seed;
+    config = rest;
+    await store.setConfig(config);
+    if (process.env.SEED_DEMO === '1') {
+      for (const b of demo) {
+        bookings.set(b.id, b);
+        await store.upsertBooking(b);
+      }
+    }
+    console.log('[boot] başlangıç verileri yüklendi');
+  }
+  if (!(await store.getAdminHash())) {
+    await store.setAdminHash(hashPassword(process.env.ADMIN_PASSWORD || 'admin123'));
+    if (!process.env.ADMIN_PASSWORD) console.warn('[boot] ADMIN_PASSWORD yok, panel şifresi: admin123');
+  }
+  config.settings.adminPassword = '';
+}
+
+/* ======================= Görünümler (kim neyi görür) ======================= */
+const publicDriver = (d: Driver) => ({ id: d.id, name: d.name, phone: d.phone, plate: d.plate, vehicleId: d.vehicleId, languages: d.languages, active: d.active, pin: '' });
+
+function publicConfig(): Config {
+  return { ...config, settings: { ...config.settings, adminPassword: '' }, drivers: [] };
+}
+
+function trackView(b: Booking) {
+  const { adminNote: _a, cashCollected: _c, ...rest } = b;
+  const d = config.drivers.find((x) => x.id === b.driverId);
+  const showDriver = d && ['assigned', 'on_way', 'arrived', 'onboard'].includes(b.status);
+  const loc = showDriver && ACTIVE.includes(b.status) ? live[d.id] : undefined;
+  return { booking: rest as Booking, driver: showDriver ? publicDriver(d) : null, live: loc ?? null };
+}
+
+/* ======================= WebSocket yayını ======================= */
+interface Client {
+  ws: WebSocket;
+  role: 'public' | 'admin' | 'driver';
+  driverId?: string;
+  track?: string;
+}
+const clients = new Set<Client>();
+const send = (c: Client, msg: unknown) => c.ws.readyState === WebSocket.OPEN && c.ws.send(JSON.stringify(msg));
+
+function broadcastConfig() {
+  for (const c of clients) {
+    if (c.role === 'admin') send(c, { t: 'config', data: { ...config, settings: { ...config.settings, adminPassword: '' } } });
+    else if (c.role === 'driver') {
+      const me = config.drivers.find((d) => d.id === c.driverId);
+      send(c, { t: 'config', data: { ...publicConfig(), drivers: me ? [publicDriver(me)] : [] } });
+    } else send(c, { t: 'config', data: publicConfig() });
+  }
+}
+
+function broadcastBooking(b: Booking, prevDriverId?: string, deleted = false) {
+  for (const c of clients) {
+    if (c.role === 'admin') send(c, deleted ? { t: 'booking-del', id: b.id } : { t: 'booking', data: b });
+    else if (c.role === 'driver') {
+      if (!deleted && b.driverId === c.driverId) send(c, { t: 'booking', data: b });
+      else if (prevDriverId === c.driverId || (deleted && b.driverId === c.driverId)) send(c, { t: 'booking-del', id: b.id });
+    } else if (c.track && c.track === b.code) {
+      if (deleted) send(c, { t: 'track', data: null });
+      else send(c, { t: 'track', data: trackView(b) });
+    }
+  }
+}
+
+function broadcastLive(driverId: string) {
+  const loc = live[driverId] ?? null;
+  for (const c of clients) {
+    if (c.role === 'admin') send(c, { t: 'live', driverId, data: loc });
+    else if (c.track) {
+      const b = [...bookings.values()].find((x) => x.code === c.track);
+      if (b && b.driverId === driverId && ACTIVE.includes(b.status)) send(c, { t: 'live', driverId, data: loc });
+    }
+  }
+}
+
+/* ======================= Yardımcılar ======================= */
+async function saveBooking(b: Booking, prevDriverId?: string) {
+  bookings.set(b.id, b);
+  await store.upsertBooking(b);
+  // İş bitince şoförün canlı konumunu kapat
+  if (b.driverId && !ACTIVE.includes(b.status) && live[b.driverId]?.bookingId === b.id) {
+    delete live[b.driverId];
+    broadcastLive(b.driverId);
+  }
+  broadcastBooking(b, prevDriverId);
+}
+
+const auth = (role: TokenData['role']) => (req: Request, res: Response, next: NextFunction) => {
+  const t = verify((req.headers.authorization || '').replace(/^Bearer /, ''));
+  if (!t || t.role !== role) return res.status(401).json({ error: 'Oturum geçersiz, lütfen tekrar giriş yapın.' });
+  (req as Request & { user: TokenData }).user = t;
+  next();
+};
+const user = (req: Request) => (req as Request & { user: TokenData }).user;
+const ip = (req: Request) => (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || '';
+const wrap = (fn: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response) =>
+  fn(req, res).catch((e) => {
+    console.error(e);
+    res.status(500).json({ error: 'Sunucu hatası' });
+  });
+
+const str = (v: unknown, max = 300) => (typeof v === 'string' ? v.slice(0, max) : '');
+const num = (v: unknown, min = 0, max = 1e6) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min;
+};
+const validPoint = (p: unknown) => {
+  const x = p as { lat?: unknown; lng?: unknown; label?: unknown } | undefined;
+  if (!x || typeof x.lat !== 'number' || typeof x.lng !== 'number' || Math.abs(x.lat) > 90 || Math.abs(x.lng) > 180) return undefined;
+  const pt = { label: str(x.label, 160), sub: str((x as { sub?: unknown }).sub, 200) || undefined, lat: x.lat, lng: x.lng, kind: str((x as { kind?: unknown }).kind, 10) as never };
+  return { ...pt, zoneId: resolveZone(state(), pt)?.id };
+};
+
+/* ======================= Uygulama ======================= */
+const app = express();
+app.disable('x-powered-by');
+app.use(express.json({ limit: '25mb' }));
+app.get('/healthz', (_req, res) => res.json({ ok: true }));
+
+// --- Herkese açık
+app.get('/api/public', (_req, res) => res.json(publicConfig()));
+
+app.get('/api/drivers', (_req, res) => res.json(config.drivers.filter((d) => d.active).map((d) => ({ id: d.id, name: d.name }))));
+
+app.post('/api/bookings', wrap(async (req, res) => {
+  const b = req.body as Partial<Booking>;
+  const type = b.type === 'hourly' ? 'hourly' : 'transfer';
+  const fromPoint = validPoint(b.fromPoint);
+  const toPoint = type === 'transfer' ? validPoint(b.toPoint) : undefined;
+  const vehicle = config.vehicles.find((v) => v.id === b.vehicleId && v.active);
+  const name = str(b.customer?.name, 80).trim();
+  const phone = str(b.customer?.phone, 40).trim();
+  if (!fromPoint || (type === 'transfer' && !toPoint) || !vehicle || !name || phone.replace(/\D/g, '').length < 7 || !/^\d{4}-\d{2}-\d{2}$/.test(String(b.date)) || !/^\d{2}:\d{2}$/.test(String(b.time))) {
+    return res.status(400).json({ error: 'Eksik veya hatalı bilgi.' });
+  }
+  const adults = num(b.adults, 1, 60);
+  const children = num(b.children, 0, 30);
+  if (vehicle.pax < adults + children) return res.status(400).json({ error: 'Araç kapasitesi yetersiz.' });
+  const extras: Record<string, number> = {};
+  for (const e of config.extras.filter((x) => x.active)) {
+    const n = num(b.extras?.[e.id], 0, e.maxQty);
+    if (n) extras[e.id] = n;
+  }
+  const roundTrip = type === 'transfer' && !!b.roundTrip;
+  const q = quote(state(), {
+    type, fromId: fromPoint.zoneId, toId: toPoint?.zoneId, fromPoint, toPoint, vehicleId: vehicle.id, roundTrip,
+    time: b.time, returnTime: b.returnTime, hours: num(b.hours, 1, 24), extras,
+  });
+  let code = str(b.code, 12).toUpperCase();
+  if (!/^VT[A-Z0-9]{5}$/.test(code) || [...bookings.values()].some((x) => x.code === code)) {
+    code = 'VT' + Math.random().toString(36).slice(2, 7).toUpperCase();
+  }
+  const now = new Date().toISOString();
+  const booking: Booking = {
+    id: 'b_' + Math.random().toString(36).slice(2, 11),
+    code,
+    createdAt: now,
+    type,
+    fromId: fromPoint.zoneId ?? '',
+    toId: toPoint ? toPoint.zoneId ?? '' : undefined,
+    fromPoint,
+    toPoint,
+    distanceKm: q.km ?? undefined,
+    fromDetail: str(b.fromDetail, 200),
+    toDetail: str(b.toDetail, 200),
+    date: String(b.date),
+    time: String(b.time),
+    roundTrip,
+    returnDate: roundTrip ? str(b.returnDate, 10) : undefined,
+    returnTime: roundTrip ? str(b.returnTime, 5) : undefined,
+    hours: type === 'hourly' ? num(b.hours, 1, 24) : undefined,
+    flightNo: str(b.flightNo, 20).toUpperCase(),
+    returnFlightNo: str(b.returnFlightNo, 20).toUpperCase() || undefined,
+    adults,
+    children,
+    luggage: num(b.luggage, 0, 60),
+    vehicleId: vehicle.id,
+    extras,
+    customer: { name, phone, email: str(b.customer?.email, 120) },
+    nameSign: str(b.nameSign, 80) || name,
+    notes: str(b.notes, 1000),
+    price: q.total,
+    displayCurrency: (['EUR', 'TRY', 'USD', 'GBP'].includes(String(b.displayCurrency)) ? b.displayCurrency : 'EUR') as Booking['displayCurrency'],
+    lang: (['tr', 'en', 'ru'].includes(String(b.lang)) ? b.lang : 'en') as Booking['lang'],
+    payment: config.settings.payments[b.payment as keyof typeof config.settings.payments] ? (b.payment as Booking['payment']) : 'cash',
+    status: 'new',
+    history: [{ status: 'new', at: now }],
+  };
+  await saveBooking(booking);
+  res.json(trackView(booking));
+}));
+
+app.get('/api/track/:code', (req, res) => {
+  const b = [...bookings.values()].find((x) => x.code === String(req.params.code).toUpperCase());
+  if (!b) return res.status(404).json({ error: 'Bulunamadı' });
+  res.json(trackView(b));
+});
+
+// --- Yönetici
+app.post('/api/admin/login', wrap(async (req, res) => {
+  const key = 'a:' + ip(req);
+  if (rateLimited(key)) return res.status(429).json({ error: 'Çok fazla deneme. 10 dakika sonra tekrar deneyin.' });
+  const h = await store.getAdminHash();
+  if (!h || !checkPassword(str(req.body?.password, 200), h)) {
+    noteFail(key);
+    return res.status(401).json({ error: 'Şifre hatalı.' });
+  }
+  clearFails(key);
+  res.json({ token: sign({ role: 'admin' }) });
+}));
+
+app.get('/api/admin/state', auth('admin'), (_req, res) => res.json(state()));
+
+app.put('/api/admin/config', auth('admin'), wrap(async (req, res) => {
+  const body = req.body as Partial<Config>;
+  for (const k of CONFIG_KEYS) {
+    if (body[k] !== undefined) (config as Record<string, unknown>)[k] = body[k];
+  }
+  const pw = config.settings.adminPassword;
+  if (pw) {
+    if (pw.length < 6) return res.status(400).json({ error: 'Şifre en az 6 karakter olmalı.' });
+    await store.setAdminHash(hashPassword(pw));
+    config.settings.adminPassword = '';
+  }
+  await store.setConfig(config);
+  broadcastConfig();
+  res.json({ ok: true });
+}));
+
+app.post('/api/admin/bookings', auth('admin'), wrap(async (req, res) => {
+  const b = req.body as Booking;
+  if (!b?.id || !b.code) return res.status(400).json({ error: 'Geçersiz kayıt' });
+  await saveBooking(b);
+  res.json({ ok: true });
+}));
+
+app.patch('/api/admin/bookings/:id', auth('admin'), wrap(async (req, res) => {
+  const prev = bookings.get(req.params.id);
+  if (!prev) return res.status(404).json({ error: 'Bulunamadı' });
+  const next = { ...prev, ...req.body, id: prev.id, code: prev.code, createdAt: prev.createdAt } as Booking;
+  await saveBooking(next, prev.driverId !== next.driverId ? prev.driverId : undefined);
+  res.json({ ok: true });
+}));
+
+app.delete('/api/admin/bookings/:id', auth('admin'), wrap(async (req, res) => {
+  const b = bookings.get(req.params.id);
+  if (b) {
+    bookings.delete(b.id);
+    await store.deleteBooking(b.id);
+    broadcastBooking(b, undefined, true);
+  }
+  res.json({ ok: true });
+}));
+
+// --- Şoför
+app.post('/api/driver/login', (req, res) => {
+  const key = 'd:' + ip(req);
+  if (rateLimited(key)) return res.status(429).json({ error: 'Çok fazla deneme. 10 dakika sonra tekrar deneyin.' });
+  const d = config.drivers.find((x) => x.id === req.body?.driverId && x.active);
+  if (!d || d.pin !== String(req.body?.pin ?? '')) {
+    noteFail(key);
+    return res.status(401).json({ error: 'PIN hatalı.' });
+  }
+  clearFails(key);
+  res.json({ token: sign({ role: 'driver', id: d.id }, 60) });
+});
+
+app.get('/api/driver/state', auth('driver'), (req, res) => {
+  const me = config.drivers.find((d) => d.id === user(req).id && d.active);
+  if (!me) return res.status(401).json({ error: 'Şoför bulunamadı' });
+  res.json({
+    version: 3,
+    ...publicConfig(),
+    drivers: [publicDriver(me)],
+    bookings: [...bookings.values()].filter((b) => b.driverId === me.id),
+    live: live[me.id] ? { [me.id]: live[me.id] } : {},
+  });
+});
+
+app.patch('/api/driver/bookings/:id', auth('driver'), wrap(async (req, res) => {
+  const prev = bookings.get(req.params.id);
+  if (!prev || prev.driverId !== user(req).id) return res.status(404).json({ error: 'Bulunamadı' });
+  const allowed: BookingStatus[] = ['on_way', 'arrived', 'onboard', 'completed', 'no_show'];
+  const status = req.body?.status as BookingStatus;
+  const next: Booking = { ...prev };
+  if (status && status !== prev.status) {
+    if (!allowed.includes(status)) return res.status(400).json({ error: 'Geçersiz durum' });
+    next.status = status;
+    next.history = [...prev.history, { status, at: new Date().toISOString(), by: 'şoför' }];
+  }
+  if (req.body?.cashCollected !== undefined) next.cashCollected = num(req.body.cashCollected, 0, 1e5);
+  await saveBooking(next);
+  res.json({ ok: true });
+}));
+
+app.post('/api/driver/location', auth('driver'), (req, res) => {
+  const id = user(req).id!;
+  if (req.body?.off) {
+    delete live[id];
+  } else {
+    const lat = Number(req.body?.lat);
+    const lng = Number(req.body?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return res.status(400).json({ error: 'Konum geçersiz' });
+    const prev = live[id];
+    // Çok küçük hareketleri ve aşırı sık gönderimleri yok say
+    if (prev && Date.now() - Date.parse(prev.at) < 4000 && haversineKm(prev, { lat, lng }) < 0.02) return res.json({ ok: true });
+    live[id] = {
+      lat, lng,
+      acc: num(req.body.acc, 0, 1e4) || undefined,
+      heading: Number.isFinite(Number(req.body.heading)) ? Number(req.body.heading) : undefined,
+      speed: Number.isFinite(Number(req.body.speed)) ? Number(req.body.speed) : undefined,
+      at: new Date().toISOString(),
+      bookingId: str(req.body.bookingId, 40) || undefined,
+    };
+  }
+  broadcastLive(id);
+  res.json({ ok: true });
+});
+
+// Eski konumları temizle (3 dk sinyal yoksa)
+setInterval(() => {
+  for (const [id, l] of Object.entries(live)) {
+    if (Date.now() - Date.parse(l.at) > 3 * 60e3) {
+      delete live[id];
+      broadcastLive(id);
+    }
+  }
+}, 30e3);
+
+/* ======================= Site dosyaları ======================= */
+const indexHtml = () => {
+  try {
+    return fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
+  } catch {
+    return null;
+  }
+};
+const escapeJson = (o: unknown) => JSON.stringify(o).replace(/</g, '\\u003c');
+
+app.use('/assets', express.static(path.join(DIST, 'assets'), { immutable: true, maxAge: '1y' }));
+app.use(express.static(DIST, { index: false, maxAge: '1h' }));
+app.get(/^(?!\/api\/).*/, (_req, res) => {
+  const html = indexHtml();
+  if (!html) return res.status(500).send('Site derlenmemiş: önce "npm run build:remote" çalıştırın.');
+  // Açık ayarları sayfaya göm: ilk açılışta içerik beklemeden görünür
+  const s = config.settings;
+  const out = html
+    .replace(/<title>.*?<\/title>/, `<title>${s.companyName.replace(/</g, '')} | ${s.tagline.tr.replace(/</g, '')}</title>`)
+    .replace('</head>', `<script>window.__CONFIG__=${escapeJson(publicConfig())}</script></head>`);
+  res.set('Cache-Control', 'no-cache').type('html').send(out);
+});
+
+/* ======================= Başlat ======================= */
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server, path: '/ws' });
+
+wss.on('connection', (ws, req) => {
+  const u = new URL(req.url || '', 'http://x');
+  const t = verify(u.searchParams.get('token'));
+  const track = u.searchParams.get('track')?.toUpperCase() || undefined;
+  const c: Client = { ws, role: t?.role ?? 'public', driverId: t?.role === 'driver' ? t.id : undefined, track };
+  clients.add(c);
+  ws.on('close', () => clients.delete(c));
+  ws.on('error', () => clients.delete(c));
+  // Render gibi platformlarda bağlantı açık kalsın
+  const ping = setInterval(() => ws.readyState === WebSocket.OPEN && ws.ping(), 25e3);
+  ws.on('close', () => clearInterval(ping));
+});
+
+boot()
+  .then(() => server.listen(PORT, () => console.log(`[http] http://localhost:${PORT}`)))
+  .catch((e) => {
+    console.error('Başlatılamadı:', e);
+    process.exit(1);
+  });

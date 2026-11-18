@@ -2,7 +2,7 @@ import type { AppState, Booking, BookingStatus, L10n, RoutePrice } from '../type
 
 const l = (tr: string, en: string, ru: string): L10n => ({ tr, en, ru });
 
-export const STATE_VERSION = 2;
+export const STATE_VERSION = 3;
 
 /** Örnek fiyatlar (EUR, tek yön, Vito baz). Gerçek fiyatlar panelden girilir. */
 const AYT_ROUTES: [string, number, number, number][] = [
@@ -215,6 +215,7 @@ export function createSeed(): AppState {
       { id: 'd2', name: 'Emre Demir', phone: '+90 555 222 22 22', pin: '1234', plate: '07 VIP 002', vehicleId: 'vclass', languages: 'TR, EN, RU', active: true },
       { id: 'd3', name: 'Hasan Yıldız', phone: '+90 555 333 33 33', pin: '1234', plate: '07 VIP 013', vehicleId: 'sprinter', languages: 'TR, DE', active: true },
     ],
+    live: {},
     bookings: [
       demoBooking(1, { fromId: 'ayt', toId: 'belek', fromDetail: 'Dış Hatlar T1', toDetail: 'Regnum Carya', date: today(0), time: '10:30', flightNo: 'TK 2412', vehicleId: 'vito', price: 40, status: 'completed', driverId: 'd1', cashCollected: 40 }, 'Sarah Miller'),
       demoBooking(2, { fromId: 'ayt', toId: 'alanya', fromDetail: 'Dış Hatlar T2', toDetail: 'Alanya Kleopatra', date: today(0), time: '14:15', flightNo: 'SU 2138', vehicleId: 'vclass', price: 115, status: 'onboard', driverId: 'd2', adults: 4, children: 2, luggage: 5, extras: { babyseat: 1 }, lang: 'ru' }, 'Алексей Кузнецов'),
@@ -227,7 +228,7 @@ export function createSeed(): AppState {
   // Demo rezervasyonlarına konum noktası ekle
   const pt = (id: string | undefined, detail: string) => {
     const l = st.locations.find((x) => x.id === id);
-    return l && l.lat != null && l.lng != null ? { label: detail || l.name, sub: l.name, lat: l.lat, lng: l.lng, zoneId: l.id, kind: 'place' as const } : undefined;
+    return l && l.lat != null && l.lng != null ? { label: l.code ? `${l.name} (${l.code})` : l.name, lat: l.lat, lng: l.lng, zoneId: l.id, kind: 'place' as const } : undefined;
   };
   st.bookings = st.bookings.map((b) => ({ ...b, fromPoint: pt(b.fromId, b.fromDetail), toPoint: pt(b.toId, b.toDetail) }));
   return st;

@@ -35,13 +35,34 @@ npm run build:demo # Site / Panel / Şoför geçiş çubuklu sunum sürümü (di
 
 Cloudflare Pages / Netlify: build komutu `npm run build`, çıktı klasörü `dist`. (`public/_redirects` SPA yönlendirmesini içerir.)
 
+## Render'a kurulum (gerçek sistem)
+Sunucu modunda veriler Render'daki PostgreSQL'de durur; müşteri, patron ve şoför ekranları WebSocket ile **anlık** güncellenir.
+
+1. render.com → **New → Blueprint** → bu GitHub deposunu seçin (`render.yaml` otomatik okunur).
+2. Sorulduğunda **ADMIN_PASSWORD** (panel şifresi) girin → **Apply**.
+3. Kurulum bitince `https://vip-transfer.onrender.com` gibi bir adres verilir.
+
+| Değişken | Açıklama |
+|---|---|
+| `DATABASE_URL` | Render veritabanından otomatik gelir |
+| `SECRET` | Oturum imzalama anahtarı (otomatik üretilir) |
+| `ADMIN_PASSWORD` | İlk panel şifresi (sonra panelden değiştirilebilir) |
+| `SEED_DEMO` | `1` ise ilk açılışta örnek rezervasyonlar yüklenir |
+
+Ücretsiz planda servis 15 dk kullanılmazsa uyur (ilk açılış ~30-50 sn) ve ücretsiz veritabanı 30 gün sonra silinir. Canlı kullanım için Starter servis + Basic veritabanı önerilir.
+
+Yerelde sunucu modu: `npm run build:remote && ADMIN_PASSWORD=gizli123 npm start` → http://localhost:8080 (DATABASE_URL yoksa veriler `data/db.json` dosyasına yazılır).
+
+### Canlı şoför konumu
+- Şoför, şoför ekranındaki **Canlı konum paylaşımı** anahtarıyla izin verir; paylaşım yalnızca **Yola çıktım → Müşteri araçta** arasında ve transfer bitene kadar sürer, iş bitince kendiliğinden kapanır.
+- Müşteri takip sayfasında aracı haritada ve **tahmini varış süresini** görür; patron panelde tüm aktif araçları canlı haritada izler.
+- Web uygulaması olduğu için şoför ekranı yolculuk boyunca açık kalmalıdır (ekranın kararması engellenir).
+
 ## Mimari notu (canlıya geçiş)
-Bu sürüm **demo / sunum** sürümüdür: tüm veriler tarayıcının `localStorage`'ında tutulur ve sekmeler arası canlı senkronize olur (şoför ekranındaki değişiklik paneli anında günceller).
-Gerçek kullanımda yalnızca `src/data/store.ts` bir sunucu katmanıyla (öneri: Supabase — veritabanı, giriş, görsel depolama, gerçek zamanlı) değiştirilir; arayüz kodu aynı kalır.
+İki çalışma modu vardır: **demo** (`npm run build`, `build:demo`) verileri tarayıcıda tutar; **sunucu** (`npm run build:remote` + `npm start`) Render'daki Node sunucusu ve PostgreSQL ile çalışır. Ekranlar her iki modda aynıdır; fark yalnızca `src/data/store.ts` içindedir. Sunucu kodu `server/` klasöründedir; fiyat sunucuda yeniden hesaplanır, panel şifresi ve şoför PIN'leri tarayıcıya gönderilmez.
 
 Canlıya geçişte yapılacaklar:
-1. Supabase tabloları + satır bazlı güvenlik (RLS), panel/şoför girişini Supabase Auth'a taşıma
-2. Görselleri depolama alanına (Storage) taşıma
+1. Görselleri veritabanı yerine bir depolama servisine (ör. Cloudflare R2) taşıma
 3. Rezervasyon bildirimleri: e-posta + WhatsApp Business API
 4. İsteğe bağlı: online ödeme (iyzico / PayTR), uçuş takip API'si, U-ETDS listesi dışa aktarımı, acente (B2B) portalı
 5. SEO: sayfa ön-render (SSG), sitemap, yapısal veri (LocalBusiness)

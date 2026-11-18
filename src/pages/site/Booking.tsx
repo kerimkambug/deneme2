@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Baby, Check, CalendarDays, Luggage, Lock, MapPin, Minus, Plane, Plus, Users } from 'lucide-react';
-import { addBooking, bookingCode, uid, useStore } from '../../data/store';
+import { ArrowLeft, ArrowRight, Baby, Loader2, Check, CalendarDays, Luggage, Lock, MapPin, Minus, Plane, Plus, Users } from 'lucide-react';
+import { addBooking, bookingCode, uid, useScope, useStore } from '../../data/store';
 import { usePrefs, useT } from '../../lib/prefs';
 import { dateLabel, hoursUntil, money, todayIso } from '../../lib/format';
 import { fmt } from '../../lib/i18n';
@@ -123,9 +123,13 @@ export function Booking() {
     setStep(n);
   };
 
-  const submit = () => {
+  const [sending, setSending] = useState(false);
+  useScope({ kind: 'public' });
+
+  const submit = async () => {
     const e = validate(3);
     if (e) return setErr(e);
+    if (sending) return;
     const now = new Date().toISOString();
     const b: TBooking = {
       id: uid('b_'),
@@ -162,8 +166,15 @@ export function Booking() {
       status: 'new',
       history: [{ status: 'new', at: now }],
     };
-    addBooking(b);
-    nav(`/takip/${b.code}?yeni=1`);
+    setSending(true);
+    try {
+      const code = await addBooking(b);
+      nav(`/takip/${code}?yeni=1`);
+    } catch (x) {
+      setErr((x as Error).message || t('required'));
+    } finally {
+      setSending(false);
+    }
   };
 
   const steps = [t('step1'), t('step2'), t('step3'), t('step4')];
@@ -435,8 +446,8 @@ export function Booking() {
                 {t('next')} <ArrowRight size={17} />
               </button>
             ) : (
-              <button type="button" className="btn btn-gold" onClick={submit}>
-                <Lock size={16} /> {t('confirmBooking')}
+              <button type="button" className="btn btn-gold" onClick={submit} disabled={sending}>
+                {sending ? <Loader2 size={16} className="spin" /> : <Lock size={16} />} {t('confirmBooking')}
               </button>
             )}
           </div>

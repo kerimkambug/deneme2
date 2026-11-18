@@ -204,6 +204,17 @@ export interface Settings {
   adminPassword: string;
 }
 
+/** Şoförün anlık konumu (yalnızca iş sırasında, izinle) */
+export interface LiveLoc {
+  lat: number;
+  lng: number;
+  acc?: number;
+  heading?: number;
+  speed?: number;
+  at: string;
+  bookingId?: string;
+}
+
 export interface AppState {
   version: number;
   settings: Settings;
@@ -213,4 +224,6 @@ export interface AppState {
   extras: Extra[];
   drivers: Driver[];
   bookings: Booking[];
+  /** driverId -> anlık konum */
+  live: Record<string, LiveLoc>;
 }

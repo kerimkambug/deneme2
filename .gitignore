@@ -3,3 +3,5 @@ dist
 dist-*
 *.local
 .DS_Store
+vip-transfer-site.zip
+data/

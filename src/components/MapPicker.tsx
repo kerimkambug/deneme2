@@ -6,6 +6,7 @@ import { getState } from '../data/store';
 import { useT } from '../lib/prefs';
 import { reverseGeocode } from '../lib/geo';
 import type { Point } from '../types';
+import { addBaseLayer } from './mapTiles';
 
 const pinIcon = L.divIcon({
   className: 'map-pin',
@@ -26,25 +27,7 @@ export function MapPicker({ initial, onPick, onClose }: { initial: Point | null;
     const s = getState().settings;
     const start = initial ?? { lat: s.mapLat, lng: s.mapLng };
     const map = L.map(el.current, { zoomControl: true, attributionControl: true }).setView([start.lat, start.lng], initial ? 15 : 10);
-    // Anahtarsız altlıklar: önce OpenStreetMap, hata verirse yedek sağlayıcı
-    const sources = [
-      { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '&copy; OpenStreetMap', subdomains: '' },
-      { url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', attribution: '&copy; OpenStreetMap, HOT', subdomains: 'abc' },
-    ];
-    let idx = 0;
-    let errors = 0;
-    let layer = L.tileLayer(sources[0].url, { maxZoom: 19, attribution: sources[0].attribution }).addTo(map);
-    const onErr = () => {
-      errors += 1;
-      if (errors < 4 || idx >= sources.length - 1) return;
-      idx += 1;
-      errors = 0;
-      map.removeLayer(layer);
-      const src = sources[idx];
-      layer = L.tileLayer(src.url, { maxZoom: 19, attribution: src.attribution, subdomains: src.subdomains || 'abc' }).addTo(map);
-      layer.on('tileerror', onErr);
-    };
-    layer.on('tileerror', onErr);
+    addBaseLayer(map);
     const marker = L.marker([start.lat, start.lng], { draggable: true, icon: pinIcon, opacity: initial ? 1 : 0 }).addTo(map);
 
     let seq = 0;

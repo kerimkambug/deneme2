@@ -2244,3 +2244,104 @@
     width: auto;
   }
 }
+
+/* =================== LIVE MAP =================== */
+.livemap {
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #e8e4dc;
+  z-index: 0;
+}
+.lm {
+  position: relative;
+}
+.lm em {
+  position: absolute;
+  left: 50%;
+  top: 40px;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font: 700 11.5px/1.5 var(--sans);
+  font-style: normal;
+  white-space: nowrap;
+  box-shadow: 0 4px 10px -4px rgba(0, 0, 0, 0.5);
+}
+.lm-carin {
+  position: absolute;
+  inset: 2px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--accent);
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent);
+  animation: carPulse 2s infinite;
+}
+.lm-carin svg {
+  transform: rotate(var(--h, 0deg));
+  fill: var(--accent);
+}
+@keyframes carPulse {
+  70% { box-shadow: 0 0 0 14px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.lm-dot {
+  position: absolute;
+  inset: 11px;
+  border-radius: 50%;
+  background: #fff;
+  border: 5px solid var(--ink);
+  box-shadow: 0 4px 10px -3px rgba(0, 0, 0, 0.5);
+}
+.lm-drop .lm-dot {
+  border-color: var(--accent);
+}
+.leaflet-marker-icon.lm {
+  transition: transform 1.2s linear;
+}
+.live-card {
+  display: grid;
+  gap: 12px;
+}
+.live-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.live-head b {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent);
+  animation: carPulse 1.8s infinite;
+}
+.live-eta {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+}
+.live-eta small {
+  display: block;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: right;
+}
+.live-note {
+  font-size: 12.5px;
+  color: var(--muted);
+}

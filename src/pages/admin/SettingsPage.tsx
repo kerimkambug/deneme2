@@ -1,7 +1,7 @@
 import { ask, notify } from '../../components/dialog';
 import { useRef, useState } from 'react';
 import { Download, Upload, RotateCcw } from 'lucide-react';
-import { exportJson, importJson, resetDemo, storageUsageKb, update, useStore } from '../../data/store';
+import { REMOTE, exportJson, importJson, resetDemo, storageUsageKb, update, useStore } from '../../data/store';
 import type { Settings } from '../../types';
 import { Field, ImageInput, L10nInput, PageHead, toast } from './ui';
 
@@ -58,11 +58,11 @@ export function SettingsPage() {
 
       <div className="apanel">
         <h4>Yedekleme</h4>
-        <p className="muted small">Bu demo sürüm verileri tarayıcıda saklar ({storageUsageKb()} KB kullanılıyor). Canlı sürümde veriler sunucuda tutulur. Yedek dosyasıyla tüm ayarlarınızı başka bir cihaza taşıyabilirsiniz.</p>
+        <p className="muted small">{REMOTE ? 'Veriler sunucuda saklanır. Yedek dosyasıyla tüm ayarları ve rezervasyonları indirip saklayabilirsiniz.' : `Bu demo sürüm verileri tarayıcıda saklar (${storageUsageKb()} KB kullanılıyor). Yedek dosyasıyla tüm ayarlarınızı başka bir cihaza taşıyabilirsiniz.`}</p>
         <div className="row-gap">
           <button className="abtn" onClick={download}><Download size={16} /> Yedek indir</button>
           <button className="abtn" onClick={() => file.current?.click()}><Upload size={16} /> Yedekten yükle</button>
-          <button className="abtn abtn-danger" onClick={async () => (await ask('Tüm veriler silinip demo verileri yüklensin mi?', { danger: true, okText: 'Sıfırla' })) && (resetDemo(), toast('Demo verileri yüklendi'))}><RotateCcw size={16} /> Demoya sıfırla</button>
+          {!REMOTE && (<button className="abtn abtn-danger" onClick={async () => (await ask('Tüm veriler silinip demo verileri yüklensin mi?', { danger: true, okText: 'Sıfırla' })) && (resetDemo(), toast('Demo verileri yüklendi'))}><RotateCcw size={16} /> Demoya sıfırla</button>)}
           <input
             ref={file}
             type="file"

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   ArrowRight, BadgeCheck, Clock3, Luggage, MessageCircle, Phone, PlaneLanding, Plus, ShieldCheck, Signpost, Star, Users, Wallet,
 } from 'lucide-react';
-import { useStore } from '../../data/store';
+import { useScope, useStore } from '../../data/store';
 import { usePrefs, useT } from '../../lib/prefs';
 import { money, telLink, waLink } from '../../lib/format';
 import { minPrice } from '../../lib/pricing';
@@ -61,6 +61,7 @@ export function Home() {
   const { currency } = usePrefs();
   const [faq, setFaq] = useState<string | null>(s.faqs[0]?.id ?? null);
   useReveal([lang]);
+  useScope({ kind: 'public' });
   useScrollVar();
 
   const vehicles = st.vehicles.filter((v) => v.active);

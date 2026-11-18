@@ -1,7 +1,7 @@
 import { ask, askText } from '../../components/dialog';
 import { useEffect, useState, type FormEvent } from 'react';
-import { Baby, ChevronRight, Luggage, LogOut, MapPinned, MessageCircle, Phone, Plane, Signature, Users, X, Wallet, UserX } from 'lucide-react';
-import { setBookingStatus, useStore } from '../../data/store';
+import { Baby, ChevronRight, Luggage, LogOut, MapPinned, MessageCircle, Phone, Plane, Signature, Users, X, Wallet, UserX, Loader2, Radio } from 'lucide-react';
+import { REMOTE, driverList, driverLogin, hasToken, logout, sendLocation, setBookingStatus, useScope, useStatus, useStore } from '../../data/store';
 import { STATUS_LABEL } from '../../lib/i18n';
 import { dateLabel, eur, mapsLink, telLink, todayIso, waLink } from '../../lib/format';
 import { Brand } from '../../components/Brand';
@@ -9,6 +9,7 @@ import { directionsLink, pointText } from '../../lib/geo';
 import type { Booking, BookingStatus } from '../../types';
 
 const KEY = 'vip:driver';
+const DEMO = import.meta.env.VITE_DEMO === '1';
 
 const NEXT: Partial<Record<BookingStatus, { to: BookingStatus; label: string }>> = {
   confirmed: { to: 'on_way', label: 'Yola çıktım' },
@@ -19,16 +20,24 @@ const NEXT: Partial<Record<BookingStatus, { to: BookingStatus; label: string }>>
 };
 
 function Login({ onOk }: { onOk: (id: string) => void }) {
-  const all = useStore((s) => s.drivers);
-  const drivers = all.filter((d) => d.active);
-  const [id, setId] = useState(drivers[0]?.id ?? '');
+  const [drivers, setDrivers] = useState<{ id: string; name: string }[]>([]);
+  const [id, setId] = useState('');
   const [pin, setPin] = useState('');
-  const [err, setErr] = useState(false);
-  const submit = (e: FormEvent) => {
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    driverList().then((l) => {
+      setDrivers(l);
+      setId((cur) => cur || l[0]?.id || '');
+    });
+  }, []);
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const d = drivers.find((x) => x.id === id);
-    if (d && d.pin === pin) onOk(id);
-    else setErr(true);
+    setBusy(true);
+    const r = await driverLogin(id, pin);
+    setBusy(false);
+    if (r) setErr(r);
+    else onOk(id);
   };
   return (
     <div className="drv drv-login">
@@ -43,14 +52,77 @@ function Login({ onOk }: { onOk: (id: string) => void }) {
         </label>
         <label className="afld">
           <span>PIN</span>
-          <input inputMode="numeric" type="password" autoComplete="one-time-code" value={pin} onChange={(e) => { setPin(e.target.value.replace(/\D/g, '')); setErr(false); }} maxLength={6} />
+          <input inputMode="numeric" type="password" autoComplete="one-time-code" value={pin} onChange={(e) => { setPin(e.target.value.replace(/\D/g, '')); setErr(''); }} maxLength={6} />
         </label>
-        {err && <p className="aerr">PIN hatalı.</p>}
-        <button className="drv-big">Giriş</button>
-        <small className="muted">Demo PIN: 1234</small>
+        {err && <p className="aerr">{err}</p>}
+        <button className="drv-big" disabled={busy || !id}>{busy ? <Loader2 size={20} className="spin" /> : null} Giriş</button>
+        {(DEMO || !REMOTE) && <small className="muted">Demo PIN: 1234</small>}
       </form>
     </div>
   );
+}
+
+const SHARE_KEY = 'vip:share';
+type ShareState = 'off' | 'waiting' | 'on' | 'denied' | 'unsupported';
+
+/** Aktif iş varken (izin verildiyse) konumu düzenli gönderir. */
+function useLiveShare(driverId: string, job: Booking | undefined, enabled: boolean): ShareState {
+  const [st, setSt] = useState<ShareState>('off');
+  const jobId = job?.id;
+  useEffect(() => {
+    if (!enabled || !jobId) {
+      setSt('off');
+      return;
+    }
+    if (!('geolocation' in navigator)) {
+      setSt('unsupported');
+      return;
+    }
+    setSt('waiting');
+    let last = 0;
+    let trailing: number | undefined;
+    let pending: GeolocationPosition | null = null;
+    const push = (p: GeolocationPosition) => {
+      last = Date.now();
+      pending = null;
+      void sendLocation(driverId, {
+        lat: p.coords.latitude,
+        lng: p.coords.longitude,
+        acc: Math.round(p.coords.accuracy),
+        heading: p.coords.heading ?? undefined,
+        speed: p.coords.speed ?? undefined,
+        bookingId: jobId,
+      });
+    };
+    let lock: { release: () => Promise<void> } | null = null;
+    const nav = navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<{ release: () => Promise<void> }> } };
+    nav.wakeLock?.request('screen').then((l) => (lock = l)).catch(() => undefined);
+    const watch = navigator.geolocation.watchPosition(
+      (p) => {
+        setSt('on');
+        const wait = 8000 - (Date.now() - last);
+        if (wait <= 0) return push(p);
+        // Sık güncellemelerde en sonuncuyu kısa süre sonra gönder
+        pending = p;
+        window.clearTimeout(trailing);
+        trailing = window.setTimeout(() => pending && push(pending), wait);
+      },
+      (e) => setSt(e.code === 1 ? 'denied' : 'waiting'),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 },
+    );
+    // Araç dururken de konum taze kalsın (sunucu 3 dk sessizlikte paylaşımı kapatır)
+    const keepAlive = window.setInterval(() => {
+      if (Date.now() - last > 60000) navigator.geolocation.getCurrentPosition(push, () => undefined, { maximumAge: 30000 });
+    }, 30000);
+    return () => {
+      window.clearTimeout(trailing);
+      window.clearInterval(keepAlive);
+      navigator.geolocation.clearWatch(watch);
+      void lock?.release().catch(() => undefined);
+      void sendLocation(driverId, null);
+    };
+  }, [enabled, jobId, driverId]);
+  return st;
 }
 
 function NameSign({ b, onClose }: { b: Booking; onClose: () => void }) {
@@ -144,17 +216,41 @@ function Job({ b, onSign }: { b: Booking; onSign: () => void }) {
 
 export function Driver() {
   const [id, setId] = useState<string | null>(() => {
-    try { return localStorage.getItem(KEY); } catch { return null; }
+    try {
+      const v = localStorage.getItem(KEY);
+      return REMOTE && !hasToken('driver') ? null : v;
+    } catch { return null; }
   });
   const s = useStore((x) => x);
+  const status = useStatus();
   const [day, setDay] = useState<'today' | 'tomorrow' | 'later'>('today');
   const [sign, setSign] = useState<Booking | null>(null);
+  const [share, setShare] = useState(() => {
+    try { return localStorage.getItem(SHARE_KEY) === '1'; } catch { return false; }
+  });
+  useScope(id ? { kind: 'driver' } : null);
   const me = s.drivers.find((d) => d.id === id && d.active);
+  const activeJob = s.bookings.find((b) => b.driverId === id && ['on_way', 'arrived', 'onboard'].includes(b.status));
+  const shareState = useLiveShare(id ?? '', activeJob, !!me && share);
+  useEffect(() => {
+    if (REMOTE && status === 'error' && !hasToken('driver')) setId(null);
+  }, [status]);
+  const toggleShare = (v: boolean) => {
+    setShare(v);
+    try { localStorage.setItem(SHARE_KEY, v ? '1' : '0'); } catch { /* yok say */ }
+  };
 
   useEffect(() => {
     document.title = 'Şoför · ' + s.settings.companyName;
   }, [s.settings.companyName]);
 
+  if (id && !me && REMOTE && status !== 'error') {
+    return (
+      <div className="drv drv-login">
+        <form><Loader2 size={26} className="spin" /><p>Yükleniyor…</p></form>
+      </div>
+    );
+  }
   if (!me)
     return (
       <Login
@@ -186,13 +282,37 @@ export function Driver() {
           <small>Merhaba,</small>
           <b>{me.name}</b>
         </div>
-        <button className="aicon" aria-label="Çıkış" onClick={() => { try { localStorage.removeItem(KEY); } catch { /* yok say */ } setId(null); }}><LogOut size={18} /></button>
+        <button className="aicon" aria-label="Çıkış" onClick={() => { try { localStorage.removeItem(KEY); } catch { /* yok say */ } logout('driver'); setId(null); }}><LogOut size={18} /></button>
       </header>
       <div className="drv-sum">
         <div><b>{left}</b><small>kalan iş</small></div>
         <div><b>{lists.today.length - left}</b><small>biten</small></div>
         <div><b>{eur(cash)}</b><small>bugün tahsilat</small></div>
       </div>
+      <div className={`share share-${share ? shareState : 'off'}`}>
+        <Radio size={20} />
+        <div>
+          <b>Canlı konum paylaşımı</b>
+          <small>
+            {!share
+              ? 'Kapalı. Açarsanız yalnızca aktif iş sırasında müşteri ve ofis aracınızı haritada görür.'
+              : shareState === 'on'
+                ? 'Paylaşılıyor · müşteriniz aracınızı haritada görüyor'
+                : shareState === 'waiting'
+                  ? 'Konum alınıyor…'
+                  : shareState === 'denied'
+                    ? 'Konum izni verilmedi. Tarayıcı ayarlarından izin verin.'
+                    : shareState === 'unsupported'
+                      ? 'Bu cihaz konum paylaşımını desteklemiyor.'
+                      : 'Açık · “Yola çıktım” dediğinizde başlar, iş bitince durur'}
+          </small>
+        </div>
+        <label className="toggle">
+          <input type="checkbox" checked={share} onChange={(e) => toggleShare(e.target.checked)} aria-label="Canlı konum paylaşımı" />
+          <span className="toggle-ui" />
+        </label>
+      </div>
+      {share && shareState === 'on' && <p className="drv-keep">Paylaşım sürerken bu ekranı açık tutun.</p>}
       <div className="drv-tabs">
         {([['today', 'Bugün'], ['tomorrow', 'Yarın'], ['later', 'Sonraki']] as const).map(([k, l]) => (
           <button key={k} className={day === k ? 'on' : ''} onClick={() => setDay(k)}>

@@ -1,12 +1,13 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Car, Check, CheckCircle2, Copy, MessageCircle, Phone, Search } from 'lucide-react';
-import { useStore } from '../../data/store';
+import { Car, Check, Loader2, CheckCircle2, Copy, MessageCircle, Phone, Search } from 'lucide-react';
+import { REMOTE, useScope, useStatus, useStore } from '../../data/store';
 import { usePrefs, useT } from '../../lib/prefs';
 import { STATUS_LABEL } from '../../lib/i18n';
 import { dateLabel, money, telLink, waLink } from '../../lib/format';
 import type { BookingStatus } from '../../types';
-import { mapLink, pointText } from '../../lib/geo';
+import { haversineKm, mapLink, pointText } from '../../lib/geo';
+import { LiveMap } from '../../components/LiveMap';
 
 const FLOW: BookingStatus[] = ['new', 'confirmed', 'assigned', 'on_way', 'arrived', 'onboard', 'completed'];
 
@@ -19,14 +20,37 @@ export function Track() {
   const { currency } = usePrefs();
   const [code, setCode] = useState(param ?? '');
   const [copied, setCopied] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const tm = window.setInterval(() => setNow(Date.now()), 5000);
+    return () => window.clearInterval(tm);
+  }, []);
 
+  useScope(param ? { kind: 'track', code: param.toUpperCase() } : { kind: 'public' });
+  const status = useStatus();
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    if (status === 'loading') setSeen(true);
+    const tm = window.setTimeout(() => setSeen(true), 4000);
+    return () => window.clearTimeout(tm);
+  }, [status]);
   const b = param ? st.bookings.find((x) => x.code.toUpperCase() === param.toUpperCase()) : undefined;
   const s = st.settings;
+  const waiting = REMOTE && !!param && !b && (!seen || status === 'loading');
 
   const find = (e: FormEvent) => {
     e.preventDefault();
     if (code.trim()) nav(`/takip/${code.trim().toUpperCase()}`);
   };
+
+  if (waiting) {
+    return (
+      <div className="bk">
+        <div className="bk-hero"><div className="wrap"><h1>{t('trackTitle')}</h1></div></div>
+        <div className="wrap narrow"><p className="empty"><Loader2 size={18} className="spin" /></p></div>
+      </div>
+    );
+  }
 
   if (!b) {
     return (
@@ -54,6 +78,10 @@ export function Track() {
   const v = st.vehicles.find((x) => x.id === b.vehicleId);
   const d = st.drivers.find((x) => x.id === b.driverId);
   const showDriver = d && ['assigned', 'on_way', 'arrived', 'onboard'].includes(b.status);
+  const rawLoc = d ? st.live[d.id] : undefined;
+  const liveLoc = rawLoc && showDriver && ['on_way', 'arrived', 'onboard'].includes(b.status) && now - Date.parse(rawLoc.at) < 3 * 60e3 ? rawLoc : undefined;
+  const target = b.status === 'onboard' ? b.toPoint : b.fromPoint;
+  const etaMin = liveLoc && target ? Math.max(1, Math.round(((haversineKm(liveLoc, target) * (s.roadFactor || 1.3)) / 40) * 60)) : null;
   const idx = FLOW.indexOf(b.status);
   const ended = b.status === 'cancelled' || b.status === 'no_show';
   const isNew = qp.get('yeni') === '1';
@@ -128,6 +156,26 @@ export function Track() {
               );
             })}
           </ol>
+        )}
+
+        {liveLoc && d && (
+          <div className="card live-card">
+            <div className="live-head">
+              <b><span className="live-dot" /> {t('liveTitle')}</b>
+              {b.status === 'arrived' ? null : etaMin != null && (
+                <span className="live-eta">~{etaMin} {t('minutes')}<small>{b.status === 'onboard' ? t('liveToDrop') : t('liveToPickup')}</small></span>
+              )}
+            </div>
+            <LiveMap
+              center={liveLoc}
+              markers={[
+                { id: 'car', kind: 'car', lat: liveLoc.lat, lng: liveLoc.lng, heading: liveLoc.heading, label: d.plate },
+                ...(target ? [{ id: b.status === 'onboard' ? 'drop' : 'pickup', kind: (b.status === 'onboard' ? 'drop' : 'pickup') as 'drop' | 'pickup', lat: target.lat, lng: target.lng, label: b.status === 'onboard' ? t('dropPin') : t('pickupPin') }] : []),
+              ]}
+            />
+            {b.status === 'arrived' && <p className="note">{t('liveArrived')}</p>}
+            <p className="live-note">{t('liveUpdated')}: {Math.max(0, Math.round((now - Date.parse(liveLoc.at)) / 1000))} {t('liveSec')}</p>
+          </div>
         )}
 
         <div className="card driver-card">

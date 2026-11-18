@@ -1744,3 +1744,58 @@ body:has(.drv) {
 .newroute {
   align-items: flex-end;
 }
+
+/* driver live share */
+.share {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid #e7e4dc;
+}
+.share > svg {
+  flex: none;
+  color: var(--muted);
+}
+.share > div {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+}
+.share small {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.share-on {
+  border-color: color-mix(in srgb, var(--ok) 45%, #e7e4dc);
+  background: #f1f9f4;
+}
+.share-on > svg {
+  color: var(--ok);
+  animation: pulseOpacity 1.6s ease-in-out infinite;
+}
+.share-denied,
+.share-unsupported {
+  border-color: #efc9c4;
+  background: #fdf3f2;
+}
+@keyframes pulseOpacity {
+  50% { opacity: 0.35; }
+}
+.drv-keep {
+  margin: -4px 4px 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.alogin-card.center,
+.drv-login form:not(:has(input)) {
+  justify-items: center;
+  text-align: center;
+}
+.dash-map {
+  margin: 4px 0 14px;
+}
