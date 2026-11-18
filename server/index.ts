@@ -9,6 +9,7 @@ import { haversineKm, resolveZone } from '../src/lib/geo';
 import type { AppState, Booking, BookingStatus, Driver, Expense, ExpenseType, LiveLoc, Settlement } from '../src/types';
 import { CONFIG_KEYS, createStore, type Config, type CustomerRec } from './db';
 import { addSub, initPush, notify, removeSub, vapidPublicKey } from './push';
+import { CHAT_MAX, chatOpen, quickText, type Chat, type ChatMsg } from '../src/lib/chat';
 import { checkPassword, clearFails, hashPassword, noteFail, rateLimited, sign, verify, type TokenData } from './auth';
 
 const PORT = Number(process.env.PORT) || 8080;
@@ -110,6 +111,7 @@ async function boot() {
   await runMigrations();
   await initPush(store);
   ledger = (await store.getKv<typeof ledger>('ledger')) ?? { expenses: [], settlements: [] };
+  void purgeOldChats();
   if (!(await store.getAdminHash())) {
     await store.setAdminHash(hashPassword(process.env.ADMIN_PASSWORD || 'admin123'));
     if (!process.env.ADMIN_PASSWORD) console.warn('[boot] ADMIN_PASSWORD yok, panel şifresi: admin123');
@@ -193,6 +195,11 @@ async function saveBooking(b: Booking, prevDriverId?: string) {
     broadcastLive(b.driverId);
   }
   broadcastBooking(b, prevDriverId);
+  const c = chats.get(b.id);
+  if (c) {
+    const payload = { t: 'chat', bookingId: b.id, code: b.code, open: chatOpen(b.status, b.driverId), chat: c };
+    for (const cl of clients) if (cl.role === 'admin' || (cl.role === 'driver' && cl.driverId === b.driverId) || cl.track === b.code) send(cl, payload);
+  }
 }
 
 const auth = (role: TokenData['role']) => (req: Request, res: Response, next: NextFunction) => {
@@ -507,6 +514,118 @@ app.delete('/api/admin/bookings/:id', auth('admin'), wrap(async (req, res) => {
   }
   res.json({ ok: true });
 }));
+
+// --- Şoför–yolcu mesajlaşması
+const chats = new Map<string, Chat>();
+const chatKey = (id: string) => `chat:${id}`;
+async function getChat(id: string): Promise<Chat> {
+  let c = chats.get(id);
+  if (!c) {
+    c = (await store.getKv<Chat>(chatKey(id))) ?? { messages: [], read: {} };
+    chats.set(id, c);
+  }
+  return c;
+}
+async function saveChat(b: Booking, c: Chat) {
+  chats.set(b.id, c);
+  await store.setKv(chatKey(b.id), c);
+  const payload = { t: 'chat', bookingId: b.id, code: b.code, open: chatOpen(b.status, b.driverId), chat: c };
+  for (const cl of clients) {
+    if (cl.role === 'admin' || (cl.role === 'driver' && cl.driverId === b.driverId) || (cl.track && cl.track === b.code) || (cl.role === 'customer' && b.customerId && cl.customerId === b.customerId)) {
+      send(cl, payload);
+    }
+  }
+}
+const byCode = (code: string) => [...bookings.values()].find((x) => x.code === String(code).toUpperCase());
+
+async function postMessage(b: Booking, from: ChatMsg['from'], body: { text?: unknown; qr?: unknown }) {
+  if (!chatOpen(b.status, b.driverId)) return { error: 'Sohbet kapalı. Şoför atandıktan sonra açılır, transfer bitince kapanır.', code: 403 };
+  const c = await getChat(b.id);
+  const recent = c.messages.filter((m) => m.from === from && Date.now() - Date.parse(m.at) < 5 * 60e3).length;
+  if (recent >= 30) return { error: 'Çok fazla mesaj gönderildi, lütfen biraz bekleyin.', code: 429 };
+  const qr = typeof body.qr === 'string' && quickText(body.qr, 'tr') ? body.qr : undefined;
+  const lang = from === 'customer' ? b.lang : 'tr';
+  const text = qr ? quickText(qr, lang)! : str(body.text, CHAT_MAX).trim();
+  if (!text) return { error: 'Mesaj boş.', code: 400 };
+  const msg: ChatMsg = { id: 'm_' + Math.random().toString(36).slice(2, 10), from, text, qr, at: new Date().toISOString() };
+  c.messages.push(msg);
+  c.read[from] = msg.at;
+  await saveChat(b, c);
+  if (from === 'customer' && b.driverId) {
+    void notify({ role: 'driver', driverId: b.driverId }, { title: `💬 ${b.customer.name}`, body: quickText(qr ?? '', 'tr') ?? text, url: '/surucu', tag: 'chat-' + b.code });
+  }
+  return { chat: c };
+}
+
+// Yolcu (rezervasyon kodu ile)
+app.get('/api/chat/:code', wrap(async (req, res) => {
+  const b = byCode(String(req.params.code));
+  if (!b) return res.status(404).json({ error: 'Bulunamadı' });
+  res.json({ open: chatOpen(b.status, b.driverId), chat: await getChat(b.id) });
+}));
+app.post('/api/chat/:code', wrap(async (req, res) => {
+  const b = byCode(String(req.params.code));
+  if (!b) return res.status(404).json({ error: 'Bulunamadı' });
+  const r = await postMessage(b, 'customer', req.body ?? {});
+  if (r.error) return res.status(r.code!).json({ error: r.error });
+  res.json(r);
+}));
+app.post('/api/chat/:code/read', wrap(async (req, res) => {
+  const b = byCode(String(req.params.code));
+  if (!b) return res.status(404).json({ error: 'Bulunamadı' });
+  const c = await getChat(b.id);
+  c.read.customer = new Date().toISOString();
+  await saveChat(b, c);
+  res.json({ ok: true });
+}));
+
+// Şoför (yalnızca kendisine atanmış iş)
+const driverBooking = (req: Request) => {
+  const b = bookings.get(req.params.id);
+  return b && b.driverId === user(req).id ? b : undefined;
+};
+app.get('/api/driver/chat/:id', auth('driver'), wrap(async (req, res) => {
+  const b = driverBooking(req);
+  if (!b) return res.status(404).json({ error: 'Bulunamadı' });
+  res.json({ open: chatOpen(b.status, b.driverId), chat: await getChat(b.id) });
+}));
+app.post('/api/driver/chat/:id', auth('driver'), wrap(async (req, res) => {
+  const b = driverBooking(req);
+  if (!b) return res.status(404).json({ error: 'Bulunamadı' });
+  const r = await postMessage(b, 'driver', req.body ?? {});
+  if (r.error) return res.status(r.code!).json({ error: r.error });
+  res.json(r);
+}));
+app.post('/api/driver/chat/:id/read', auth('driver'), wrap(async (req, res) => {
+  const b = driverBooking(req);
+  if (!b) return res.status(404).json({ error: 'Bulunamadı' });
+  const c = await getChat(b.id);
+  c.read.driver = new Date().toISOString();
+  await saveChat(b, c);
+  res.json({ ok: true });
+}));
+
+// Patron (yalnızca okuma)
+app.get('/api/admin/chat/:id', auth('admin'), wrap(async (req, res) => {
+  const b = bookings.get(req.params.id);
+  if (!b) return res.status(404).json({ error: 'Bulunamadı' });
+  res.json({ open: chatOpen(b.status, b.driverId), chat: await getChat(b.id) });
+}));
+
+// Transferi 30 günden önce biten sohbetleri sil (kişisel veri saklama süresi)
+async function purgeOldChats() {
+  const limit = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+  for (const b of bookings.values()) {
+    if (b.date < limit && !chatOpen(b.status, b.driverId)) {
+      const c = chats.get(b.id) ?? (await store.getKv<Chat>(chatKey(b.id)));
+      if (c && c.messages.length) {
+        chats.delete(b.id);
+        await store.setKv(chatKey(b.id), { messages: [], read: {} });
+      }
+    }
+  }
+}
+setInterval(() => void purgeOldChats().catch(() => undefined), 6 * 3600e3);
 
 // --- Masraf ve kasa
 async function saveLedger(driverId?: string) {

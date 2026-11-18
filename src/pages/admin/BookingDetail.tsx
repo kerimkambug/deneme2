@@ -8,6 +8,7 @@ import { mapLink, pointText } from '../../lib/geo';
 import { appUrl, dateLabel, eur, flightLink, money, telLink, waLink } from '../../lib/format';
 import type { AppState, Booking, BookingStatus } from '../../types';
 import { Modal, StatusBadge, toast } from './ui';
+import { ChatPanel } from '../../components/ChatPanel';
 
 const STATUSES = Object.keys(STATUS_LABEL) as BookingStatus[];
 
@@ -216,6 +217,13 @@ export function BookingDetail({ id, onClose }: { id: string; onClose: () => void
           <span>İç not (müşteri görmez)</span>
           <textarea rows={2} defaultValue={b.adminNote ?? ''} onBlur={(e) => patchBooking(b.id, { adminNote: e.target.value })} />
         </div>
+
+        {b.driverId && !['new', 'confirmed'].includes(b.status) && (
+          <section>
+            <h4>Şoför–yolcu mesajları</h4>
+            <ChatPanel b={b} as="admin" lang="tr" height={240} />
+          </section>
+        )}
 
         <section>
           <h4>Geçmiş</h4>

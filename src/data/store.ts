@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import type { AppState, Booking, BookingStatus, Customer, Driver, Expense, LiveLoc } from '../types';
 import { createSeed, STATE_VERSION } from './seed';
 import { registerKeyGetter } from '../lib/gmaps';
+import { chatOpen, type Chat, type ChatMsg } from '../lib/chat';
 
 /**
  * Veri katmanı. İki modda çalışır:
@@ -300,6 +301,7 @@ function connectWs(s: Scope) {
     } else if (m.t === 'track') applyTrack(m.data);
     else if (m.t === 'cview') upsertView(m.data);
     else if (m.t === 'customers') state = { ...state, customers: m.data };
+    else if (m.t === 'chat') setChat(m.bookingId, { open: m.open, chat: m.chat }, true);
     else if (m.t === 'ledger') state = { ...state, expenses: m.data.expenses, settlements: m.data.settlements };
     emit();
   };
@@ -439,6 +441,102 @@ export async function submitReview(code: string, rating: number, text: string) {
   }
   const b = state.bookings.find((x) => x.code === code);
   if (b) patchBooking(b.id, { review: { rating, text, at: new Date().toISOString() } });
+}
+
+/* ---------------- şoför–yolcu mesajlaşması ---------------- */
+type ChatState = { open: boolean; chat: Chat };
+let chatMap: Record<string, ChatState> = {};
+const CHAT_KEY = 'vip:chats';
+
+function loadLocalChats(): Record<string, Chat> {
+  try {
+    return JSON.parse(localStorage.getItem(CHAT_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function setChat(id: string, cs: ChatState, fromServer = false) {
+  const prev = chatMap[id];
+  chatMap = { ...chatMap, [id]: cs };
+  // Karşı taraftan yeni mesaj geldiyse sesli uyarı için olay yayınla
+  if (fromServer && prev && cs.chat.messages.length > prev.chat.messages.length) {
+    window.dispatchEvent(new CustomEvent('vip:chat', { detail: { bookingId: id, msg: cs.chat.messages[cs.chat.messages.length - 1] } }));
+  }
+  emit();
+}
+
+if (!REMOTE && typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key !== CHAT_KEY) return;
+    const all = loadLocalChats();
+    for (const [id, c] of Object.entries(all)) {
+      const b = state.bookings.find((x) => x.id === id);
+      setChat(id, { open: !!b && chatOpen(b.status, b.driverId), chat: c }, true);
+    }
+  });
+}
+
+export function useChat(bookingId: string | undefined): ChatState | undefined {
+  return useSyncExternalStore(
+    (cb) => {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    () => (bookingId ? chatMap[bookingId] : undefined),
+  );
+}
+
+type ChatAs = 'customer' | 'driver' | 'admin';
+const chatUrl = (as: ChatAs, b: Booking) => (as === 'customer' ? `/api/chat/${encodeURIComponent(b.code)}` : `/api/${as}/chat/${b.id}`);
+const chatToken = (as: ChatAs) => (as === 'customer' ? null : getToken(as));
+
+export async function loadChat(as: ChatAs, b: Booking) {
+  if (REMOTE) {
+    const r = await api<ChatState>('GET', chatUrl(as, b), undefined, chatToken(as));
+    setChat(b.id, r);
+    return;
+  }
+  setChat(b.id, { open: chatOpen(b.status, b.driverId), chat: loadLocalChats()[b.id] ?? { messages: [], read: {} } });
+}
+
+export async function sendChat(as: 'customer' | 'driver', b: Booking, body: { text?: string; qr?: string; display?: string }) {
+  if (REMOTE) {
+    const r = await api<{ chat: Chat }>('POST', chatUrl(as, b), { text: body.text, qr: body.qr }, chatToken(as));
+    setChat(b.id, { open: true, chat: r.chat });
+    return;
+  }
+  if (!chatOpen(b.status, b.driverId)) throw new Error('Sohbet kapalı.');
+  const all = loadLocalChats();
+  const c = all[b.id] ?? { messages: [], read: {} };
+  const msg: ChatMsg = { id: uid('m_'), from: as, text: body.display ?? body.text ?? '', qr: body.qr, at: new Date().toISOString() };
+  c.messages.push(msg);
+  c.read[as] = msg.at;
+  all[b.id] = c;
+  try {
+    localStorage.setItem(CHAT_KEY, JSON.stringify(all));
+  } catch {
+    /* yok say */
+  }
+  setChat(b.id, { open: true, chat: { ...c } });
+}
+
+export async function markChatRead(as: 'customer' | 'driver', b: Booking) {
+  const cur = chatMap[b.id];
+  if (cur) setChat(b.id, { ...cur, chat: { ...cur.chat, read: { ...cur.chat.read, [as]: new Date().toISOString() } } });
+  if (REMOTE) {
+    await api('POST', `${chatUrl(as, b)}/read`, {}, chatToken(as)).catch(() => undefined);
+    return;
+  }
+  const all = loadLocalChats();
+  if (all[b.id]) {
+    all[b.id].read[as] = new Date().toISOString();
+    try {
+      localStorage.setItem(CHAT_KEY, JSON.stringify(all));
+    } catch {
+      /* yok say */
+    }
+  }
 }
 
 /* ---------------- masraf & kasa ---------------- */

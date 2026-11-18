@@ -1,11 +1,13 @@
 import { ask, askText } from '../../components/dialog';
 import { useEffect, useState, type FormEvent } from 'react';
-import { Baby, ChevronRight, Luggage, LogOut, MapPinned, MessageCircle, Phone, Plane, Signature, Users, X, Wallet, UserX, Loader2, Radio } from 'lucide-react';
-import { REMOTE, driverList, driverLogin, hasToken, logout, sendLocation, setBookingStatus, useScope, useStatus, useStore } from '../../data/store';
+import { Baby, ChevronRight, Luggage, LogOut, MapPinned, MessageCircle, Phone, Plane, Signature, Users, X, Wallet, UserX, Loader2, Radio, MessagesSquare } from 'lucide-react';
+import { REMOTE, loadChat, useChat, driverList, driverLogin, hasToken, logout, sendLocation, setBookingStatus, useScope, useStatus, useStore } from '../../data/store';
 import { STATUS_LABEL } from '../../lib/i18n';
 import { dateLabel, eur, flightLink, mapsLink, telLink, todayIso, waLink } from '../../lib/format';
 import { Brand } from '../../components/Brand';
 import { PushBar } from '../../components/PushBar';
+import { ChatPanel } from '../../components/ChatPanel';
+import { chatOpen, unreadCount } from '../../lib/chat';
 import { DriverExpenses } from './expenses';
 import { beep } from '../../lib/push';
 import { directionsLink, pointText } from '../../lib/geo';
@@ -154,6 +156,13 @@ function NameSign({ b, onClose }: { b: Booking; onClose: () => void }) {
 function Job({ b, onSign }: { b: Booking; onSign: () => void }) {
   const s = useStore((x) => x);
   const [open, setOpen] = useState(false);
+  const [chatUi, setChatOpenUi] = useState(false);
+  const chat = useChat(b.id);
+  const unread = unreadCount(chat?.chat, 'driver');
+  useEffect(() => {
+    if (chatOpen(b.status, b.driverId)) void loadChat('driver', b).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [b.id, b.status]);
   const loc = (id?: string) => s.locations.find((l) => l.id === id)?.name ?? '';
   const v = s.vehicles.find((x) => x.id === b.vehicleId);
   const next = NEXT[b.status];
@@ -203,6 +212,12 @@ function Job({ b, onSign }: { b: Booking; onSign: () => void }) {
             <a href={waLink(b.customer.phone)} target="_blank" rel="noopener noreferrer"><MessageCircle size={20} /> Yaz</a>
             <a href={navHref} target="_blank" rel="noopener noreferrer"><MapPinned size={20} /> {b.status === 'onboard' ? 'Varışa git' : 'Alışa git'}</a>
             <button onClick={onSign}><Signature size={20} /> Tabela</button>
+            {(chatOpen(b.status, b.driverId) || (chat?.chat.messages.length ?? 0) > 0) && (
+              <button onClick={() => setChatOpenUi(true)} className="djob-chat">
+                <MessagesSquare size={20} /> Mesaj
+                {unread > 0 && <em className="badge-dot">{unread}</em>}
+              </button>
+            )}
           </div>
           {next && (
             <button className="drv-big" onClick={advance}>
@@ -214,6 +229,21 @@ function Job({ b, onSign }: { b: Booking; onSign: () => void }) {
               <UserX size={18} /> Müşteri gelmedi
             </button>
           )}
+        </div>
+      )}
+      {chatUi && (
+        <div className="sheet-bg" onMouseDown={(e) => e.target === e.currentTarget && setChatOpenUi(false)}>
+          <div className="sheet" role="dialog" aria-label="Mesajlar">
+            <div className="sheet-h">
+              <div>
+                <b>{b.customer.name}</b>
+                <small>{b.code} · yolcu dili: {b.lang.toUpperCase()}</small>
+              </div>
+              <button className="aicon" onClick={() => setChatOpenUi(false)} aria-label="Kapat"><X size={20} /></button>
+            </div>
+            <ChatPanel b={b} as="driver" lang="tr" height={360} />
+            <small className="muted sheet-hint">Hazır mesajlar yolcuya kendi dilinde ({b.lang.toUpperCase()}) gider.</small>
+          </div>
         </div>
       )}
     </article>
@@ -243,8 +273,15 @@ export function Driver() {
   }, [status]);
   useEffect(() => {
     const nj = () => beep();
+    const nc = (e: Event) => {
+      if ((e as CustomEvent<{ msg: { from: string } }>).detail?.msg?.from === 'customer') beep();
+    };
     window.addEventListener('vip:new-job', nj);
-    return () => window.removeEventListener('vip:new-job', nj);
+    window.addEventListener('vip:chat', nc);
+    return () => {
+      window.removeEventListener('vip:new-job', nj);
+      window.removeEventListener('vip:chat', nc);
+    };
   }, []);
   const toggleShare = (v: boolean) => {
     setShare(v);

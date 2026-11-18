@@ -9,6 +9,8 @@ import type { BookingStatus } from '../../types';
 import { haversineKm, mapLink, pointText } from '../../lib/geo';
 import { LiveMap } from '../../components/LiveMap';
 import { ReviewCard } from '../../components/ReviewCard';
+import { ChatPanel } from '../../components/ChatPanel';
+import { beep } from '../../lib/push';
 
 const FLOW: BookingStatus[] = ['new', 'confirmed', 'assigned', 'on_way', 'arrived', 'onboard', 'completed'];
 
@@ -22,6 +24,13 @@ export function Track() {
   const [code, setCode] = useState(param ?? '');
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const on = (e: Event) => {
+      if ((e as CustomEvent<{ msg: { from: string } }>).detail?.msg?.from === 'driver') beep();
+    };
+    window.addEventListener('vip:chat', on);
+    return () => window.removeEventListener('vip:chat', on);
+  }, []);
   useEffect(() => {
     const tm = window.setInterval(() => setNow(Date.now()), 5000);
     return () => window.clearInterval(tm);
@@ -204,6 +213,13 @@ export function Track() {
             <p className="muted">{t('driverPending')}</p>
           )}
         </div>
+
+        {b.driverId && !['new', 'confirmed', 'cancelled'].includes(b.status) && (
+          <div className="card chat-card">
+            <h3>{t('chatTitle')}</h3>
+            <ChatPanel b={b} as="customer" lang={lang} />
+          </div>
+        )}
 
         {!logged ? (
           <div className="card acc-cta">

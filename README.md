@@ -28,6 +28,7 @@ Demo (tarayıcı) sürümü girişleri: panel şifresi `admin123`, şoför PIN'i
 - **Kasa:** şoför ekranından masraf (₺), Panel → Kasa'da tahsilat − masraf − teslim = bakiye.
 - **Raporlar:** ciro ve dağılımlar, sefer listesi ve tüm rezervasyonlar CSV.
 - **Diller:** TR, EN, RU, DE, PL.
+- **Şoför–yolcu mesajlaşması:** patron şoför atayınca açılır, transfer bitince (tamamlandı/iptal/gelmedi) kapanır. Yolcu takip sayfasından, şoför iş kartındaki **Mesaj** butonundan yazar; patron rezervasyon detayında yalnızca okur. Hazır mesajlar okuyanın dilinde görünür, serbest metinde "Çevir" bağlantısı vardır. Yolcu yazınca şoföre anlık bildirim gider. Mesaj 500 karakter, 5 dakikada en fazla 30 mesaj; sohbetler transferden 30 gün sonra silinir.
 
 Henüz eklenemeyenler ve nedenleri: **[TODO.md](TODO.md)**.
 

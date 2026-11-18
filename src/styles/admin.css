@@ -2067,3 +2067,58 @@ body:has(.drv) {
     grid-template-columns: 1fr;
   }
 }
+/* şoför sohbet sayfası */
+.djob-acts:has(.djob-chat) {
+  grid-template-columns: repeat(5, 1fr);
+}
+.djob-chat {
+  position: relative;
+}
+.badge-dot {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bad);
+  color: #fff;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 20px;
+  animation: pulseOpacity 1.4s infinite;
+}
+.sheet-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  display: grid;
+  align-items: end;
+  background: rgba(12, 13, 16, 0.5);
+  animation: fadeIn 0.2s;
+}
+.sheet {
+  display: grid;
+  gap: 10px;
+  width: min(560px, 100%);
+  margin: 0 auto;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  border-radius: 22px 22px 0 0;
+  background: #fff;
+  animation: fadeUp 0.3s var(--ease);
+}
+.sheet-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sheet-h > div {
+  display: grid;
+}
+.sheet-h small,
+.sheet-hint {
+  color: var(--muted);
+  font-size: 12px;
+}

@@ -38,6 +38,10 @@ Bu liste, sistemde **şu an eklenemeyen** işleri içerir. Her maddede neden bek
 
 ## D. İleride (büyüme)
 
+- ☐ **Yolcuya anlık bildirim**: şoför mesaj yazınca yolcunun telefonuna bildirim (şu an yolcu takip sayfası açıkken sesli uyarı alıyor). Hesaplı müşteriler için Web Push eklenebilir.
+- ☐ 💳 **Mesajlarda otomatik çeviri**: serbest yazılan mesajların karşı tarafın diline otomatik çevrilmesi (Google Translate / DeepL API anahtarı gerekir). Şu an "Çevir" bağlantısı var.
+- ☐ **Mesajda fotoğraf/konum gönderme** (ör. "araç burada" fotoğrafı).
+
 - ☐ **Mağaza uygulaması (şoför)**: telefon kilitliyken de konum gönderebilmek için Android/iOS uygulaması. Şu anki web uygulamasında şoför ekranı açık kalmalı.
 - ☐ **SEO**: sayfaların sunucuda hazır üretilmesi (ön-render), `sitemap.xml`, yapısal veri (LocalBusiness), her güzergâh için ayrı açılış sayfası ("Antalya Havalimanı – Belek transfer").
 - ☐ **Sadakat programı**: tekrar gelen müşteriye otomatik indirim kodu.
@@ -55,3 +59,4 @@ Bu liste, sistemde **şu an eklenemeyen** işleri içerir. Her maddede neden bek
 - **Raporlar** (ciro, şoför/güzergâh/araç/dil dağılımı) ve **CSV dışa aktarım** (sefer listesi, tüm rezervasyonlar)
 - Uçuş numarasından **canlı uçuş durumu** bağlantısı
 - **Almanca ve Lehçe** dil desteği
+- **Şoför–yolcu mesajlaşması** (şoför atanınca açılır, transfer bitince kapanır; hazır mesajlar karşı tarafın dilinde)
