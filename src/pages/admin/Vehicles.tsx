@@ -1,3 +1,4 @@
+import { ask, notify } from '../../components/dialog';
 import { useState } from 'react';
 import { ArrowDown, ArrowUp, Luggage, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import { uid, update, useStore } from '../../data/store';
@@ -16,13 +17,13 @@ function Editor({ initial, onClose }: { initial: Vehicle; onClose: () => void })
   const set = <K extends keyof Vehicle>(k: K, val: Vehicle[K]) => setV((p) => ({ ...p, [k]: val }));
   const isNew = !useStore((s) => s.vehicles.some((x) => x.id === initial.id));
   const save = () => {
-    if (!v.name.trim()) return alert('Araç adı zorunlu.');
+    if (!v.name.trim()) return notify('Araç adı zorunlu.');
     const ok = update((s) => {
       const i = s.vehicles.findIndex((x) => x.id === v.id);
       if (i >= 0) s.vehicles[i] = v;
       else s.vehicles.push(v);
     });
-    if (!ok) alert('Kaydedilemedi: tarayıcı depolama alanı doldu. Daha az / daha küçük görsel deneyin. (Canlı sürümde görseller sunucuda saklanır.)');
+    if (!ok) notify('Kaydedilemedi: tarayıcı depolama alanı doldu. Daha az / daha küçük görsel deneyin. (Canlı sürümde görseller sunucuda saklanır.)');
     else { toast('Araç kaydedildi'); onClose(); }
   };
   return (
@@ -57,9 +58,9 @@ export function Vehicles() {
   const bookings = useStore((s) => s.bookings);
   const [edit, setEdit] = useState<Vehicle | null>(null);
   const move = (i: number, d: number) => update((s) => { const [x] = s.vehicles.splice(i, 1); s.vehicles.splice(i + d, 0, x); });
-  const del = (v: Vehicle) => {
+  const del = async (v: Vehicle) => {
     const used = bookings.filter((b) => b.vehicleId === v.id).length;
-    if (!confirm(used ? `${v.name} ${used} rezervasyonda kullanılıyor. Silmek yerine gizlemeniz önerilir. Yine de silinsin mi?` : `${v.name} silinsin mi?`)) return;
+    if (!(await ask(used ? `${v.name} ${used} rezervasyonda kullanılıyor. Silmek yerine gizlemeniz önerilir. Yine de silinsin mi?` : `${v.name} silinsin mi?`))) return;
     update((s) => {
       s.vehicles = s.vehicles.filter((x) => x.id !== v.id);
       s.routes.forEach((r) => delete r.prices[v.id]);

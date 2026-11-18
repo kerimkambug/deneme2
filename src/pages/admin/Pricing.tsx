@@ -1,3 +1,4 @@
+import { ask, notify } from '../../components/dialog';
 import { useMemo, useState } from 'react';
 import { Plus, Star, Trash2, Percent } from 'lucide-react';
 import { uid, update, useStore } from '../../data/store';
@@ -31,15 +32,15 @@ export function Pricing() {
     });
 
   const addRoute = () => {
-    if (!nf.from || !nf.to || nf.from === nf.to) return alert('İki farklı nokta seçin.');
-    if (s.routes.some((r) => (r.from === nf.from && r.to === nf.to) || (r.from === nf.to && r.to === nf.from))) return alert('Bu güzergâh zaten var.');
+    if (!nf.from || !nf.to || nf.from === nf.to) return notify('İki farklı nokta seçin.');
+    if (s.routes.some((r) => (r.from === nf.from && r.to === nf.to) || (r.from === nf.to && r.to === nf.from))) return notify('Bu güzergâh zaten var.');
     update((x) => { x.routes.unshift({ id: uid('r_'), from: nf.from, to: nf.to, durationMin: 60, distanceKm: 50, prices: {}, popular: false }); });
     setNf({ from: '', to: '' });
     toast('Güzergâh eklendi, fiyatları girin');
   };
 
-  const bulk = (sign: 1 | -1) => {
-    if (!confirm(`${filter ? name(filter) + ' içeren ' : 'Tüm '}güzergâh fiyatları %${pct} ${sign > 0 ? 'artırılsın' : 'düşürülsün'} mı?`)) return;
+  const bulk = async (sign: 1 | -1) => {
+    if (!(await ask(`${filter ? name(filter) + ' içeren ' : 'Tüm '}güzergâh fiyatları %${pct} ${sign > 0 ? 'artırılsın' : 'düşürülsün'} mı?`))) return;
     update((x) => {
       x.routes.forEach((r) => {
         if (filter && r.from !== filter && r.to !== filter) return;
@@ -115,7 +116,7 @@ export function Pricing() {
                         </div>
                       </td>
                     ))}
-                    <td><button className="aicon" aria-label="Sil" onClick={() => confirm('Güzergâh silinsin mi?') && update((x) => { x.routes = x.routes.filter((y) => y.id !== r.id); })}><Trash2 size={15} /></button></td>
+                    <td><button className="aicon" aria-label="Sil" onClick={async () => (await ask('Güzergâh silinsin mi?', { danger: true, okText: 'Sil' })) && update((x) => { x.routes = x.routes.filter((y) => y.id !== r.id); })}><Trash2 size={15} /></button></td>
                   </tr>
                 ))}
               </tbody>
@@ -154,7 +155,7 @@ export function Pricing() {
                   <input value={l.name} onChange={(e) => update((x) => { x.locations.find((y) => y.id === l.id)!.name = e.target.value; })} />
                   {l.kind === 'airport' && <input className="sm" value={l.code ?? ''} onChange={(e) => update((x) => { x.locations.find((y) => y.id === l.id)!.code = e.target.value.toUpperCase(); })} />}
                   <small>{n} güzergâh</small>
-                  <button className="aicon" aria-label="Sil" onClick={() => confirm(`${l.name} ve ${n} güzergâhı silinsin mi?`) && update((x) => { x.locations = x.locations.filter((y) => y.id !== l.id); x.routes = x.routes.filter((r) => r.from !== l.id && r.to !== l.id); })}><Trash2 size={15} /></button>
+                  <button className="aicon" aria-label="Sil" onClick={async () => (await ask(`${l.name} ve ${n} güzergâhı silinsin mi?`, { danger: true, okText: 'Sil' })) && update((x) => { x.locations = x.locations.filter((y) => y.id !== l.id); x.routes = x.routes.filter((r) => r.from !== l.id && r.to !== l.id); })}><Trash2 size={15} /></button>
                 </div>
               );
             })}
@@ -172,7 +173,7 @@ export function Pricing() {
                 <Field label="Fiyat (EUR, 0 = ücretsiz)"><input type="number" min={0} value={e.price} onChange={(ev) => update((x) => { x.extras.find((y) => y.id === e.id)!.price = +ev.target.value; })} /></Field>
                 <Field label="En fazla adet"><input type="number" min={1} value={e.maxQty} onChange={(ev) => update((x) => { x.extras.find((y) => y.id === e.id)!.maxQty = +ev.target.value; })} /></Field>
                 <Field label="Durum"><Toggle checked={e.active} onChange={(v) => update((x) => { x.extras.find((y) => y.id === e.id)!.active = v; })} label={e.active ? 'Aktif' : 'Pasif'} /></Field>
-                <Field label=" "><button className="abtn abtn-ghost" onClick={() => confirm('Silinsin mi?') && update((x) => { x.extras = x.extras.filter((y) => y.id !== e.id); })}><Trash2 size={15} /> Sil</button></Field>
+                <Field label=" "><button className="abtn abtn-ghost" onClick={async () => (await ask('Silinsin mi?')) && update((x) => { x.extras = x.extras.filter((y) => y.id !== e.id); })}><Trash2 size={15} /> Sil</button></Field>
               </div>
             ))}
           </div>

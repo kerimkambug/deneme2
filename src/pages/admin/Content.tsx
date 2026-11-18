@@ -1,3 +1,4 @@
+import { ask, notify } from '../../components/dialog';
 import { useState } from 'react';
 import { Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { uid, update, useStore } from '../../data/store';
@@ -11,7 +12,7 @@ function useSettings() {
   const s = useStore((x) => x.settings);
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => {
     const ok = update((x) => { x.settings[k] = v; });
-    if (!ok) alert('Kaydedilemedi: depolama alanı doldu. Daha küçük görsel kullanın.');
+    if (!ok) notify('Kaydedilemedi: depolama alanı doldu. Daha küçük görsel kullanın.');
   };
   return { s, set };
 }
@@ -25,7 +26,7 @@ function ListEditor<T extends { id: string }>({ items, onChange, render, make, a
           <div className="listed-ctl">
             <button className="aicon" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Yukarı"><ArrowUp size={15} /></button>
             <button className="aicon" disabled={i === items.length - 1} onClick={() => move(i, 1)} aria-label="Aşağı"><ArrowDown size={15} /></button>
-            <button className="aicon" onClick={() => confirm('Silinsin mi?') && onChange(items.filter((x) => x.id !== it.id))} aria-label="Sil"><Trash2 size={15} /></button>
+            <button className="aicon" onClick={async () => (await ask('Silinsin mi?')) && onChange(items.filter((x) => x.id !== it.id))} aria-label="Sil"><Trash2 size={15} /></button>
           </div>
           <div className="aform">{render(it, (p) => onChange(items.map((x) => (x.id === it.id ? { ...x, ...p } : x))))}</div>
         </div>

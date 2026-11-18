@@ -1,3 +1,4 @@
+import { ask } from '../../components/dialog';
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Plane, Users, Luggage } from 'lucide-react';
 import { setBookingStatus, useStore } from '../../data/store';
@@ -24,10 +25,10 @@ export function Dispatch() {
   const drivers = s.drivers.filter((d) => d.active);
   const lanes = [{ id: '', name: 'Atanmamış', plate: '' }, ...drivers];
 
-  const assign = (bookingId: string, driverId: string) => {
+  const assign = async (bookingId: string, driverId: string) => {
     const b = s.bookings.find((x) => x.id === bookingId);
     if (!b || (b.driverId ?? '') === driverId) return;
-    if (driverId && driverConflicts(s, b, driverId).length && !confirm('Bu şoförün aynı saatlerde başka işi var. Yine de atansın mı?')) return;
+    if (driverId && driverConflicts(s, b, driverId).length && !(await ask('Bu şoförün aynı saatlerde başka işi var. Yine de atansın mı?'))) return;
     const status = driverId ? (['new', 'confirmed'].includes(b.status) ? 'assigned' : b.status) : b.status === 'assigned' ? 'confirmed' : b.status;
     setBookingStatus(b.id, status, 'sevk', { driverId: driverId || undefined });
     toast(driverId ? `${drivers.find((d) => d.id === driverId)?.name} atandı` : 'Atama kaldırıldı');

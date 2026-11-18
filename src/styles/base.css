@@ -258,3 +258,48 @@ p {
     scroll-behavior: auto !important;
   }
 }
+
+.demobar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  z-index: 60;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(12, 13, 16, 0.86);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.5);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: rgba(243, 239, 231, 0.7);
+}
+.demobar > span {
+  padding: 0 8px 0 10px;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+}
+.demobar a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  transition: background 0.2s, color 0.2s;
+}
+.demobar a.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+@media (max-width: 640px) {
+  .demobar {
+    left: 14px;
+    transform: none;
+  }
+}

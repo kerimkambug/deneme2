@@ -1,3 +1,4 @@
+import { ask, askText } from '../../components/dialog';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Baby, ChevronRight, Luggage, LogOut, MapPinned, MessageCircle, Phone, Plane, Signature, Users, X, Wallet, UserX } from 'lucide-react';
 import { setBookingStatus, useStore } from '../../data/store';
@@ -81,10 +82,10 @@ function Job({ b, onSign }: { b: Booking; onSign: () => void }) {
   const dest = b.status === 'onboard' ? `${b.toDetail || ''} ${loc(b.toId)}` : `${b.fromDetail || ''} ${loc(b.fromId)}`;
   const extras = Object.entries(b.extras).map(([id, n]) => `${s.extras.find((e) => e.id === id)?.name.tr ?? id} ×${n}`);
 
-  const advance = () => {
+  const advance = async () => {
     if (!next) return;
     if (next.to === 'completed' && b.payment !== 'online') {
-      const v = prompt(`Tahsil edilen tutar (EUR)?`, String(b.price || ''));
+      const v = await askText('Müşteriden tahsil edilen tutar', String(b.price || ''), { title: 'Transferi tamamla', okText: 'Tamamla', inputMode: 'decimal', suffix: '€' });
       if (v === null) return;
       setBookingStatus(b.id, 'completed', 'şoför', { cashCollected: Math.max(0, Number(v.replace(',', '.')) || 0) });
       return;
@@ -127,7 +128,7 @@ function Job({ b, onSign }: { b: Booking; onSign: () => void }) {
             </button>
           )}
           {b.status === 'arrived' && (
-            <button className="drv-ghost" onClick={() => confirm('Müşteri gelmedi olarak işaretlensin mi? Ofise bildirilecek.') && setBookingStatus(b.id, 'no_show', 'şoför')}>
+            <button className="drv-ghost" onClick={async () => (await ask('Müşteri gelmedi olarak işaretlensin mi? Ofise bildirilecek.')) && setBookingStatus(b.id, 'no_show', 'şoför')}>
               <UserX size={18} /> Müşteri gelmedi
             </button>
           )}

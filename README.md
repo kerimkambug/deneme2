@@ -24,6 +24,7 @@ Demo girişleri: panel şifresi `admin123`, şoför PIN'i `1234`.
 npm install
 npm run dev        # http://localhost:5173
 npm run build      # dist/ klasörüne üretim çıktısı
+npm run build:demo # Site / Panel / Şoför geçiş çubuklu sunum sürümü (dist-demo/)
 ```
 
 Cloudflare Pages / Netlify: build komutu `npm run build`, çıktı klasörü `dist`. (`public/_redirects` SPA yönlendirmesini içerir.)

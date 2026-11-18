@@ -1,3 +1,4 @@
+import { ask } from '../../components/dialog';
 import { useState } from 'react';
 import { AlertTriangle, MessageCircle, Phone, Trash2, Send, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -89,8 +90,8 @@ export function BookingDetail({ id, onClose }: { id: string; onClose: () => void
         <>
           <button
             className="abtn abtn-danger"
-            onClick={() => {
-              if (confirm('Bu rezervasyon kalıcı olarak silinsin mi?')) {
+            onClick={async () => {
+              if ((await ask('Bu rezervasyon kalıcı olarak silinsin mi?', { danger: true, okText: 'Sil' }))) {
                 update((x) => { x.bookings = x.bookings.filter((y) => y.id !== b.id); });
                 onClose();
               }

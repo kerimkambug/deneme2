@@ -16,6 +16,9 @@ import { Drivers } from './pages/admin/Drivers';
 import { Content } from './pages/admin/Content';
 import { SettingsPage } from './pages/admin/SettingsPage';
 import { Driver } from './pages/driver/Driver';
+import { DemoBar } from './components/DemoBar';
+
+const DEMO = import.meta.env.VITE_DEMO === '1';
 
 /** Sayfa değişiminde başa döner; /#bolum bağlantılarında o bölüme kayar. */
 function ScrollManager() {
@@ -38,6 +41,7 @@ export function App() {
     <PrefsProvider>
       <Router>
         <ScrollManager />
+        {DEMO && <DemoBar />}
         <Routes>
           <Route element={<SiteLayout />}>
             <Route index element={<Home />} />

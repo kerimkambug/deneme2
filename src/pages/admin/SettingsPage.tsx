@@ -1,3 +1,4 @@
+import { ask, notify } from '../../components/dialog';
 import { useRef, useState } from 'react';
 import { Download, Upload, RotateCcw } from 'lucide-react';
 import { exportJson, importJson, resetDemo, storageUsageKb, update, useStore } from '../../data/store';
@@ -50,7 +51,7 @@ export function SettingsPage() {
         <Field label="Yeni panel şifresi">
           <div className="inline">
             <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} />
-            <button className="abtn" onClick={() => { if (pw.length < 6) return alert('En az 6 karakter.'); set('adminPassword', pw); setPw(''); toast('Şifre değişti'); }}>Değiştir</button>
+            <button className="abtn" onClick={() => { if (pw.length < 6) return notify('En az 6 karakter.'); set('adminPassword', pw); setPw(''); toast('Şifre değişti'); }}>Değiştir</button>
           </div>
         </Field>
       </div>
@@ -61,7 +62,7 @@ export function SettingsPage() {
         <div className="row-gap">
           <button className="abtn" onClick={download}><Download size={16} /> Yedek indir</button>
           <button className="abtn" onClick={() => file.current?.click()}><Upload size={16} /> Yedekten yükle</button>
-          <button className="abtn abtn-danger" onClick={() => confirm('Tüm veriler silinip demo verileri yüklensin mi?') && (resetDemo(), toast('Demo verileri yüklendi'))}><RotateCcw size={16} /> Demoya sıfırla</button>
+          <button className="abtn abtn-danger" onClick={async () => (await ask('Tüm veriler silinip demo verileri yüklensin mi?', { danger: true, okText: 'Sıfırla' })) && (resetDemo(), toast('Demo verileri yüklendi'))}><RotateCcw size={16} /> Demoya sıfırla</button>
           <input
             ref={file}
             type="file"
@@ -75,7 +76,7 @@ export function SettingsPage() {
                 importJson(await f.text());
                 toast('Yedek yüklendi');
               } catch (x) {
-                alert((x as Error).message);
+                notify((x as Error).message);
               }
             }}
           />

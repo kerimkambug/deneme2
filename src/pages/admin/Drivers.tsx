@@ -1,3 +1,4 @@
+import { ask, notify } from '../../components/dialog';
 import { useState } from 'react';
 import { MessageCircle, Pencil, Phone, Plus, Trash2 } from 'lucide-react';
 import { uid, update, useStore } from '../../data/store';
@@ -14,7 +15,7 @@ export function Drivers() {
 
   const save = () => {
     if (!edit) return;
-    if (!edit.name.trim() || !/^\d{4,6}$/.test(edit.pin)) return alert('Ad ve 4–6 haneli PIN zorunlu.');
+    if (!edit.name.trim() || !/^\d{4,6}$/.test(edit.pin)) return notify('Ad ve 4–6 haneli PIN zorunlu.');
     update((x) => {
       const i = x.drivers.findIndex((d) => d.id === edit.id);
       if (i >= 0) x.drivers[i] = edit;
@@ -54,7 +55,7 @@ export function Drivers() {
                 <a className="aicon" href={telLink(d.phone)} aria-label="Ara"><Phone size={16} /></a>
                 <a className="aicon" href={waLink(d.phone)} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp"><MessageCircle size={16} /></a>
                 <span className="grow" />
-                <button className="aicon" aria-label="Sil" onClick={() => confirm(`${d.name} silinsin mi?`) && update((x) => { x.drivers = x.drivers.filter((y) => y.id !== d.id); x.bookings.forEach((b) => { if (b.driverId === d.id && b.status !== 'completed') b.driverId = undefined; }); })}><Trash2 size={16} /></button>
+                <button className="aicon" aria-label="Sil" onClick={async () => (await ask(`${d.name} silinsin mi?`, { danger: true, okText: 'Sil' })) && update((x) => { x.drivers = x.drivers.filter((y) => y.id !== d.id); x.bookings.forEach((b) => { if (b.driverId === d.id && b.status !== 'completed') b.driverId = undefined; }); })}><Trash2 size={16} /></button>
                 <button className="abtn abtn-sm" onClick={() => setEdit({ ...d })}><Pencil size={14} /> Düzenle</button>
               </div>
             </article>
