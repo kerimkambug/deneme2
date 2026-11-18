@@ -7,7 +7,7 @@ import { createSeed } from '../src/data/seed';
 import { quote } from '../src/lib/pricing';
 import { haversineKm, resolveZone } from '../src/lib/geo';
 import type { AppState, Booking, BookingStatus, Driver, LiveLoc } from '../src/types';
-import { CONFIG_KEYS, createStore, type Config } from './db';
+import { CONFIG_KEYS, createStore, type Config, type CustomerRec } from './db';
 import { checkPassword, clearFails, hashPassword, noteFail, rateLimited, sign, verify, type TokenData } from './auth';
 
 const PORT = Number(process.env.PORT) || 8080;
@@ -18,9 +18,11 @@ const store = createStore();
 let config: Config;
 const bookings = new Map<string, Booking>();
 const live: Record<string, LiveLoc> = {};
+const customers = new Map<string, CustomerRec>();
+const publicCustomer = ({ passHash: _p, ...c }: CustomerRec) => c;
 const ACTIVE: BookingStatus[] = ['on_way', 'arrived', 'onboard'];
 
-const state = (): AppState => ({ version: 3, ...config, bookings: [...bookings.values()], live });
+const state = (): AppState => ({ version: 3, ...config, bookings: [...bookings.values()], live, customers: [...customers.values()].map(publicCustomer) });
 
 async function boot() {
   await store.init();
@@ -29,9 +31,10 @@ async function boot() {
     const seed = createSeed();
     config = { ...seed, ...saved, settings: { ...seed.settings, ...saved.settings } } as Config;
     for (const b of await store.listBookings()) bookings.set(b.id, b);
+    for (const c of await store.listCustomers()) customers.set(c.id, c);
   } else {
     const seed = createSeed();
-    const { bookings: demo, live: _l, version: _v, ...rest } = seed;
+    const { bookings: demo, live: _l, version: _v, customers: _c, ...rest } = seed;
     config = rest;
     await store.setConfig(config);
     if (process.env.SEED_DEMO === '1') {
@@ -68,8 +71,9 @@ function trackView(b: Booking) {
 /* ======================= WebSocket yayını ======================= */
 interface Client {
   ws: WebSocket;
-  role: 'public' | 'admin' | 'driver';
+  role: 'public' | 'admin' | 'driver' | 'customer';
   driverId?: string;
+  customerId?: string;
   track?: string;
 }
 const clients = new Set<Client>();
@@ -91,6 +95,8 @@ function broadcastBooking(b: Booking, prevDriverId?: string, deleted = false) {
     else if (c.role === 'driver') {
       if (!deleted && b.driverId === c.driverId) send(c, { t: 'booking', data: b });
       else if (prevDriverId === c.driverId || (deleted && b.driverId === c.driverId)) send(c, { t: 'booking-del', id: b.id });
+    } else if (c.role === 'customer') {
+      if (b.customerId === c.customerId) send(c, deleted ? { t: 'booking-del', id: b.id } : { t: 'cview', data: trackView(b) });
     } else if (c.track && c.track === b.code) {
       if (deleted) send(c, { t: 'track', data: null });
       else send(c, { t: 'track', data: trackView(b) });
@@ -102,7 +108,10 @@ function broadcastLive(driverId: string) {
   const loc = live[driverId] ?? null;
   for (const c of clients) {
     if (c.role === 'admin') send(c, { t: 'live', driverId, data: loc });
-    else if (c.track) {
+    else if (c.role === 'customer') {
+      const mine = [...bookings.values()].some((x) => x.customerId === c.customerId && x.driverId === driverId && ACTIVE.includes(x.status));
+      if (mine) send(c, { t: 'live', driverId, data: loc });
+    } else if (c.track) {
       const b = [...bookings.values()].find((x) => x.code === c.track);
       if (b && b.driverId === driverId && ACTIVE.includes(b.status)) send(c, { t: 'live', driverId, data: loc });
     }
@@ -222,6 +231,8 @@ app.post('/api/bookings', wrap(async (req, res) => {
     status: 'new',
     history: [{ status: 'new', at: now }],
   };
+  const ct = verify((req.headers.authorization || '').replace(/^Bearer /, ''));
+  if (ct?.role === 'customer' && ct.id && customers.has(ct.id)) booking.customerId = ct.id;
   await saveBooking(booking);
   res.json(trackView(booking));
 }));
@@ -231,6 +242,108 @@ app.get('/api/track/:code', (req, res) => {
   if (!b) return res.status(404).json({ error: 'Bulunamadı' });
   res.json(trackView(b));
 });
+
+// --- Müşteri hesabı
+const normEmail = (e: unknown) => str(e, 120).trim().toLowerCase();
+const normPhone = (p: unknown) => str(p, 40).replace(/\D/g, '');
+const findCustomer = (login: string) => {
+  const e = login.trim().toLowerCase();
+  const ph = normPhone(login);
+  return [...customers.values()].find((c) => c.email === e || (ph.length >= 7 && normPhone(c.phone).endsWith(ph.slice(-10))));
+};
+
+function customerView(c: CustomerRec) {
+  const mine = [...bookings.values()].filter((b) => b.customerId === c.id);
+  return { customer: publicCustomer(c), views: mine.map(trackView) };
+}
+
+app.post('/api/customer/register', wrap(async (req, res) => {
+  const key = 'cr:' + ip(req);
+  if (rateLimited(key)) return res.status(429).json({ error: 'Çok fazla deneme. 10 dakika sonra tekrar deneyin.' });
+  const name = str(req.body?.name, 80).trim();
+  const email = normEmail(req.body?.email);
+  const phone = str(req.body?.phone, 40).trim();
+  const password = str(req.body?.password, 200);
+  if (!name || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || normPhone(phone).length < 7) return res.status(400).json({ error: 'Ad, geçerli e-posta ve telefon gerekli.', code: 'invalid' });
+  if (password.length < 6) return res.status(400).json({ error: 'Şifre en az 6 karakter olmalı.', code: 'weak' });
+  if (findCustomer(email) || findCustomer(phone)) {
+    noteFail(key);
+    return res.status(409).json({ error: 'Bu e-posta veya telefonla kayıtlı bir hesap var. Lütfen giriş yapın.', code: 'exists' });
+  }
+  const c: CustomerRec = { id: 'c_' + Math.random().toString(36).slice(2, 11), name, email, phone, createdAt: new Date().toISOString(), passHash: hashPassword(password) };
+  customers.set(c.id, c);
+  await store.upsertCustomer(c);
+  broadcastAdminCustomers();
+  res.json({ token: sign({ role: 'customer', id: c.id }, 180), ...customerView(c) });
+}));
+
+app.post('/api/customer/login', wrap(async (req, res) => {
+  const key = 'cl:' + ip(req);
+  if (rateLimited(key)) return res.status(429).json({ error: 'Çok fazla deneme. 10 dakika sonra tekrar deneyin.' });
+  const c = findCustomer(str(req.body?.login, 120));
+  if (!c || !checkPassword(str(req.body?.password, 200), c.passHash)) {
+    noteFail(key);
+    return res.status(401).json({ error: 'E-posta/telefon veya şifre hatalı.' });
+  }
+  clearFails(key);
+  res.json({ token: sign({ role: 'customer', id: c.id }, 180), ...customerView(c) });
+}));
+
+app.get('/api/customer/me', auth('customer'), (req, res) => {
+  const c = customers.get(user(req).id!);
+  if (!c) return res.status(401).json({ error: 'Hesap bulunamadı' });
+  res.json(customerView(c));
+});
+
+app.patch('/api/customer/me', auth('customer'), wrap(async (req, res) => {
+  const c = customers.get(user(req).id!);
+  if (!c) return res.status(401).json({ error: 'Hesap bulunamadı' });
+  if (req.body?.name) c.name = str(req.body.name, 80).trim() || c.name;
+  if (req.body?.phone && normPhone(req.body.phone).length >= 7) c.phone = str(req.body.phone, 40).trim();
+  if (req.body?.password) {
+    if (!checkPassword(str(req.body?.oldPassword, 200), c.passHash)) return res.status(400).json({ error: 'Mevcut şifre hatalı.' });
+    if (String(req.body.password).length < 6) return res.status(400).json({ error: 'Şifre en az 6 karakter olmalı.' });
+    c.passHash = hashPassword(String(req.body.password));
+  }
+  await store.upsertCustomer(c);
+  broadcastAdminCustomers();
+  res.json(customerView(c));
+}));
+
+app.post('/api/customer/claim', auth('customer'), wrap(async (req, res) => {
+  const c = customers.get(user(req).id!);
+  const b = [...bookings.values()].find((x) => x.code === str(req.body?.code, 12).toUpperCase().trim());
+  if (!c || !b) return res.status(404).json({ error: 'Bu koda ait rezervasyon bulunamadı.' });
+  if (b.customerId && b.customerId !== c.id) return res.status(409).json({ error: 'Bu rezervasyon başka bir hesaba bağlı.' });
+  if (!b.customerId) await saveBooking({ ...b, customerId: c.id });
+  res.json(customerView(c));
+}));
+
+function broadcastAdminCustomers() {
+  const list = [...customers.values()].map(publicCustomer);
+  for (const c of clients) if (c.role === 'admin') send(c, { t: 'customers', data: list });
+}
+
+app.post('/api/admin/customers/:id/password', auth('admin'), wrap(async (req, res) => {
+  const c = customers.get(req.params.id);
+  const pw = str(req.body?.password, 200);
+  if (!c) return res.status(404).json({ error: 'Bulunamadı' });
+  if (pw.length < 6) return res.status(400).json({ error: 'Şifre en az 6 karakter olmalı.' });
+  c.passHash = hashPassword(pw);
+  await store.upsertCustomer(c);
+  res.json({ ok: true });
+}));
+
+app.delete('/api/admin/customers/:id', auth('admin'), wrap(async (req, res) => {
+  const c = customers.get(req.params.id);
+  if (c) {
+    customers.delete(c.id);
+    await store.deleteCustomer(c.id);
+    for (const b of bookings.values()) if (b.customerId === c.id) await saveBooking({ ...b, customerId: undefined });
+    broadcastAdminCustomers();
+  }
+  res.json({ ok: true });
+}));
 
 // --- Yönetici
 app.post('/api/admin/login', wrap(async (req, res) => {
@@ -310,6 +423,7 @@ app.get('/api/driver/state', auth('driver'), (req, res) => {
     drivers: [publicDriver(me)],
     bookings: [...bookings.values()].filter((b) => b.driverId === me.id),
     live: live[me.id] ? { [me.id]: live[me.id] } : {},
+    customers: [],
   });
 });
 
@@ -394,7 +508,7 @@ wss.on('connection', (ws, req) => {
   const u = new URL(req.url || '', 'http://x');
   const t = verify(u.searchParams.get('token'));
   const track = u.searchParams.get('track')?.toUpperCase() || undefined;
-  const c: Client = { ws, role: t?.role ?? 'public', driverId: t?.role === 'driver' ? t.id : undefined, track };
+  const c: Client = { ws, role: t?.role ?? 'public', driverId: t?.role === 'driver' ? t.id : undefined, customerId: t?.role === 'customer' ? t.id : undefined, track };
   clients.add(c);
   ws.on('close', () => clients.delete(c));
   ws.on('error', () => clients.delete(c));

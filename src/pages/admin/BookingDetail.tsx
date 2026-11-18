@@ -153,7 +153,7 @@ export function BookingDetail({ id, onClose }: { id: string; onClose: () => void
           <section>
             <h4>Müşteri</h4>
             <dl className="adl">
-              <dt>Ad</dt><dd>{b.customer.name}</dd>
+              <dt>Ad</dt><dd>{b.customer.name}{b.customerId && <span className="pill">Üye</span>}</dd>
               <dt>Telefon</dt><dd>{b.customer.phone}</dd>
               {b.customer.email && (<><dt>E-posta</dt><dd>{b.customer.email}</dd></>)}
               <dt>Tabela</dt><dd>{b.nameSign}</dd>

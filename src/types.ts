@@ -95,6 +95,17 @@ export type BookingStatus =
   | 'cancelled'
   | 'no_show';
 
+/** Müşteri hesabı (şifre özeti yalnızca sunucuda tutulur) */
+export interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  createdAt: string;
+  /** Yalnızca demo (tarayıcı) modunda */
+  password?: string;
+}
+
 export type PaymentMethod = 'cash' | 'card_vehicle' | 'online';
 
 export interface Booking {
@@ -123,6 +134,8 @@ export interface Booking {
   vehicleId: string;
   extras: Record<string, number>;
   customer: { name: string; phone: string; email: string };
+  /** Hesaplı müşterinin kimliği */
+  customerId?: string;
   nameSign: string;
   notes: string;
   /** EUR toplam; 0 = fiyat teklifi bekleniyor */
@@ -230,4 +243,6 @@ export interface AppState {
   bookings: Booking[];
   /** driverId -> anlık konum */
   live: Record<string, LiveLoc>;
+  /** Panelde müşteri listesi; müşteri oturumunda yalnızca kendisi */
+  customers: Customer[];
 }

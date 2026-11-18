@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { Menu, X, Phone, MessageCircle, Mail, MapPin, Instagram, ShieldCheck } from 'lucide-react';
+import { Menu, X, UserRound, Phone, MessageCircle, Mail, MapPin, Instagram, ShieldCheck } from 'lucide-react';
 import { Brand } from '../../components/Brand';
-import { useStore } from '../../data/store';
+import { isCustomerLoggedIn, useAccount, useStore } from '../../data/store';
 import { usePrefs, useT } from '../../lib/prefs';
 import { LANG_LABEL } from '../../lib/i18n';
 import { CURRENCIES, LANGS } from '../../types';
@@ -13,6 +13,8 @@ export function SiteLayout() {
   const { t } = useT();
   const { lang, setLang, currency, setCurrency } = usePrefs();
   const [open, setOpen] = useState(false);
+  useAccount();
+  const logged = isCustomerLoggedIn();
   const [solid, setSolid] = useState(false);
   const loc = useLocation();
   const isHome = loc.pathname === '/';
@@ -73,6 +75,10 @@ export function SiteLayout() {
                 ))}
               </select>
             </div>
+            <Link to="/hesap" className="hdr-acc" aria-label={logged ? t('accMy') : t('accLogin')} title={logged ? t('accMy') : t('accLogin')}>
+              <UserRound size={18} />
+              <span>{logged ? t('accMy') : t('accLogin')}</span>
+            </Link>
             <Link to="/rezervasyon" className="btn btn-gold btn-sm hdr-cta">
               {t('bookNow')}
             </Link>
@@ -87,6 +93,7 @@ export function SiteLayout() {
               {label}
             </Link>
           ))}
+          <Link to="/hesap">{logged ? t('accMy') : `${t('accLogin')} / ${t('accRegister')}`}</Link>
           <div className="mnav-langs">
             {LANGS.map((l) => (
               <button key={l} className={l === lang ? 'on' : ''} onClick={() => setLang(l)}>

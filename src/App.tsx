@@ -6,6 +6,8 @@ import { SiteLayout } from './pages/site/SiteLayout';
 import { Home } from './pages/site/Home';
 import { Booking } from './pages/site/Booking';
 import { Track } from './pages/site/Track';
+import { Account } from './pages/site/Account';
+import { Customers } from './pages/admin/Customers';
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { Dashboard } from './pages/admin/Dashboard';
 import { Bookings } from './pages/admin/Bookings';
@@ -48,6 +50,7 @@ export function App() {
             <Route path="rezervasyon" element={<Booking />} />
             <Route path="takip" element={<Track />} />
             <Route path="takip/:code" element={<Track />} />
+            <Route path="hesap" element={<Account />} />
           </Route>
           <Route path="panel" element={<AdminLayout />}>
             <Route index element={<Dashboard />} />
@@ -56,6 +59,7 @@ export function App() {
             <Route path="araclar" element={<Vehicles />} />
             <Route path="fiyatlar" element={<Pricing />} />
             <Route path="soforler" element={<Drivers />} />
+            <Route path="musteriler" element={<Customers />} />
             <Route path="icerik" element={<Content />} />
             <Route path="ayarlar" element={<SettingsPage />} />
           </Route>

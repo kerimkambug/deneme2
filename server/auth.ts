@@ -6,7 +6,7 @@ const SECRET = process.env.SECRET || (() => {
 })();
 
 export interface TokenData {
-  role: 'admin' | 'driver';
+  role: 'admin' | 'driver' | 'customer';
   id?: string;
   exp: number;
 }

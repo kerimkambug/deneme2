@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Car, Check, Loader2, CheckCircle2, Copy, MessageCircle, Phone, Search } from 'lucide-react';
-import { REMOTE, useScope, useStatus, useStore } from '../../data/store';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Car, Check, Loader2, UserRound, CheckCircle2, Copy, MessageCircle, Phone, Search } from 'lucide-react';
+import { REMOTE, isCustomerLoggedIn, useAccount, useScope, useStatus, useStore } from '../../data/store';
 import { usePrefs, useT } from '../../lib/prefs';
 import { STATUS_LABEL } from '../../lib/i18n';
 import { dateLabel, money, telLink, waLink } from '../../lib/format';
@@ -28,6 +28,8 @@ export function Track() {
 
   useScope(param ? { kind: 'track', code: param.toUpperCase() } : { kind: 'public' });
   const status = useStatus();
+  const account = useAccount();
+  const logged = isCustomerLoggedIn();
   const [seen, setSeen] = useState(false);
   useEffect(() => {
     if (status === 'loading') setSeen(true);
@@ -199,6 +201,31 @@ export function Track() {
             <p className="muted">{t('driverPending')}</p>
           )}
         </div>
+
+        {!logged ? (
+          <div className="card acc-cta">
+            <UserRound size={22} />
+            <p>{t('accTrackCta')}</p>
+            <div className="row-gap">
+              <Link className="btn btn-gold btn-sm" to={`/hesap?kayit=1&ekle=${b.code}`}>{t('accRegister')}</Link>
+              <Link className="btn btn-outline-dark btn-sm" to={`/hesap?ekle=${b.code}`}>{t('accLogin')}</Link>
+            </div>
+          </div>
+        ) : account && b.customerId === account.id ? (
+          isNew && qp.get('hesap') === '1' ? (
+            <div className="card acc-cta">
+              <UserRound size={22} />
+              <p>{t('accWelcome')}</p>
+              <Link className="btn btn-outline-dark btn-sm" to="/hesap">{t('accMy')}</Link>
+            </div>
+          ) : null
+        ) : (
+          <div className="card acc-cta">
+            <UserRound size={22} />
+            <p>{t('accTrackCta')}</p>
+            <Link className="btn btn-gold btn-sm" to={`/hesap?ekle=${b.code}`}>{t('accAddToAccount')}</Link>
+          </div>
+        )}
 
         <div className="card">
           <h3>{t('details')}</h3>

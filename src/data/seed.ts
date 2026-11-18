@@ -217,6 +217,7 @@ export function createSeed(): AppState {
       { id: 'd3', name: 'Hasan Yıldız', phone: '+90 555 333 33 33', pin: '1234', plate: '07 VIP 013', vehicleId: 'sprinter', languages: 'TR, DE', active: true },
     ],
     live: {},
+    customers: [],
     bookings: [
       demoBooking(1, { fromId: 'ayt', toId: 'belek', fromDetail: 'Dış Hatlar T1', toDetail: 'Regnum Carya', date: today(0), time: '10:30', flightNo: 'TK 2412', vehicleId: 'vito', price: 40, status: 'completed', driverId: 'd1', cashCollected: 40 }, 'Sarah Miller'),
       demoBooking(2, { fromId: 'ayt', toId: 'alanya', fromDetail: 'Dış Hatlar T2', toDetail: 'Alanya Kleopatra', date: today(0), time: '14:15', flightNo: 'SU 2138', vehicleId: 'vclass', price: 115, status: 'onboard', driverId: 'd2', adults: 4, children: 2, luggage: 5, extras: { babyseat: 1 }, lang: 'ru' }, 'Алексей Кузнецов'),

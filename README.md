@@ -5,6 +5,7 @@ Havalimanı / otel transferi yapan VIP taşımacılık firmaları için hazırla
 | Adres | Kim kullanır | Ne yapar |
 |---|---|---|
 | `/` | Müşteri | Anında fiyat, 4 adımda rezervasyon, filo, fiyat listesi, SSS (TR / EN / RU, EUR / TRY / USD / GBP) |
+| `/hesap` | Müşteri | Hesap aç / giriş (e-posta veya telefon), yaklaşan & geçmiş yolculuklar, canlı takip, kodla rezervasyon ekleme |
 | `/takip/KOD` | Müşteri | Rezervasyon durumu, şoför adı/plaka/telefon, canlı durum çizelgesi |
 | `/panel` | Patron / ofis | Özet, sevk planı (sürükle-bırak), rezervasyonlar, araçlar, bölgeler & fiyatlar, şoförler, site içeriği, ayarlar |
 | `/surucu` | Şoför | Günün işleri, tek tuşla durum güncelleme, tam ekran isim tabelası, navigasyon, tahsilat |
@@ -53,6 +54,13 @@ Sunucu modunda veriler Render'daki PostgreSQL'de durur; müşteri, patron ve şo
 Ücretsiz planda servis 15 dk kullanılmazsa uyur (ilk açılış ~30-50 sn) ve ücretsiz veritabanı 30 gün sonra silinir. Canlı kullanım için Starter servis + Basic veritabanı önerilir.
 
 Yerelde sunucu modu: `npm run build:remote && ADMIN_PASSWORD=gizli123 npm start` → http://localhost:8080 (DATABASE_URL yoksa veriler `data/db.json` dosyasına yazılır).
+
+### Müşteri hesapları
+- Müşteri rezervasyonun son adımında tek tıkla hesap açar (e-posta + şifre) ya da `/hesap` sayfasından kayıt olur; giriş e-posta **veya telefon** ile yapılır.
+- Hesabım sayfasında yaklaşan/geçmiş yolculuklar anlık güncellenir; şoför yola çıkınca **Canlı takip** butonu belirir.
+- Hesapsız yapılan rezervasyonlar rezervasyon koduyla hesaba eklenebilir (kod gizli olduğu için başkası sahiplenemez).
+- Panel → **Müşteriler**: kayıtlı müşteriler, yolculuk sayısı, harcama; şifresini unutan müşteriye yeni şifre verilip WhatsApp'tan iletilebilir.
+- Şifreler sunucuda scrypt ile saklanır. (E-posta ile şifre sıfırlama, bir e-posta servisi bağlandığında eklenebilir.)
 
 ### Canlı şoför konumu
 - Şoför, şoför ekranındaki **Canlı konum paylaşımı** anahtarıyla izin verir; paylaşım yalnızca **Yola çıktım → Müşteri araçta** arasında ve transfer bitene kadar sürer, iş bitince kendiliğinden kapanır.

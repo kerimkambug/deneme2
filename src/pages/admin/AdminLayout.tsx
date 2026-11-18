@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { NavLink, Outlet, Link } from 'react-router-dom';
-import { LayoutDashboard, CalendarClock, ListChecks, Car, Tags, UserRound, PanelsTopLeft, Settings, LogOut, ExternalLink, Menu, X, Lock, Loader2, WifiOff } from 'lucide-react';
+import { LayoutDashboard, CalendarClock, ListChecks, Car, Tags, UserRound, PanelsTopLeft, Settings, LogOut, ExternalLink, Menu, X, Lock, Loader2, WifiOff, Contact } from 'lucide-react';
 import { REMOTE, adminLogin, hasToken, logout as storeLogout, useScope, useStatus, useStore } from '../../data/store';
 import { toast } from './ui';
 import { Brand } from '../../components/Brand';
@@ -76,6 +76,7 @@ const NAV = [
   { to: '/panel/araclar', icon: Car, label: 'Araçlar' },
   { to: '/panel/fiyatlar', icon: Tags, label: 'Bölgeler & Fiyatlar' },
   { to: '/panel/soforler', icon: UserRound, label: 'Şoförler' },
+  { to: '/panel/musteriler', icon: Contact, label: 'Müşteriler' },
   { to: '/panel/icerik', icon: PanelsTopLeft, label: 'Site İçeriği' },
   { to: '/panel/ayarlar', icon: Settings, label: 'Ayarlar' },
 ];

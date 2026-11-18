@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Baby, Loader2, Check, CalendarDays, Luggage, Lock, MapPin, Minus, Plane, Plus, Users } from 'lucide-react';
-import { addBooking, bookingCode, uid, useScope, useStore } from '../../data/store';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, Baby, Loader2, UserRound, Check, CalendarDays, Luggage, Lock, MapPin, Minus, Plane, Plus, Users } from 'lucide-react';
+import { AccountError, addBooking, bookingCode, customerRegister, isCustomerLoggedIn, uid, useAccount, useScope, useStore } from '../../data/store';
 import { usePrefs, useT } from '../../lib/prefs';
 import { dateLabel, hoursUntil, money, todayIso } from '../../lib/format';
 import { fmt } from '../../lib/i18n';
@@ -71,6 +71,8 @@ export function Booking() {
       notes: '',
       payment: (Object.keys(s.payments) as PaymentMethod[]).find((k) => s.payments[k]) ?? 'cash',
       consent: false,
+      createAccount: true,
+      password: '',
     };
   });
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((p) => ({ ...p, [k]: v }));
@@ -111,6 +113,10 @@ export function Booking() {
     }
     if (n >= 3) {
       if (!f.name.trim() || f.phone.replace(/\D/g, '').length < 7 || !f.consent) return t('required');
+      if (!logged && f.createAccount) {
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())) return t('accEmailReq');
+        if (f.password.length < 6) return t('accPassword2');
+      }
     }
     return '';
   };
@@ -124,12 +130,32 @@ export function Booking() {
   };
 
   const [sending, setSending] = useState(false);
-  useScope({ kind: 'public' });
+  const [exists, setExists] = useState(false);
+  const account = useAccount();
+  const logged = isCustomerLoggedIn();
+  useScope(logged ? { kind: 'customer' } : { kind: 'public' });
+  // Giriş yapmış müşterinin bilgilerini doldur
+  useEffect(() => {
+    if (account) setF((p) => ({ ...p, name: p.name || account.name, phone: p.phone || account.phone, email: p.email || account.email }));
+  }, [account]);
 
   const submit = async () => {
     const e = validate(3);
     if (e) return setErr(e);
     if (sending) return;
+    let newAccount = false;
+    if (!logged && f.createAccount) {
+      setSending(true);
+      try {
+        await customerRegister({ name: f.name.trim(), email: f.email.trim(), phone: f.phone.trim(), password: f.password });
+        newAccount = true;
+      } catch (x) {
+        setSending(false);
+        const ae = x as AccountError;
+        setExists(ae.code === 'exists');
+        return setErr(ae.code === 'exists' ? t('accExists') : ae.message);
+      }
+    }
     const now = new Date().toISOString();
     const b: TBooking = {
       id: uid('b_'),
@@ -169,7 +195,7 @@ export function Booking() {
     setSending(true);
     try {
       const code = await addBooking(b);
-      nav(`/takip/${code}?yeni=1`);
+      nav(`/takip/${code}?yeni=1${newAccount ? '&hesap=1' : ''}`);
     } catch (x) {
       setErr((x as Error).message || t('required'));
     } finally {
@@ -388,6 +414,32 @@ export function Booking() {
                 </>
               )}
 
+              {logged ? (
+                <p className="note acc-note"><UserRound size={16} /> {t('accLinked')}</p>
+              ) : (
+                <div className="acc-create">
+                  <label className="chk">
+                    <input type="checkbox" checked={f.createAccount} onChange={(e) => set('createAccount', e.target.checked)} />
+                    <span><b>{t('accCreateOnBook')}</b></span>
+                  </label>
+                  {f.createAccount && (
+                    <div className="form-grid">
+                      <label className="fld">
+                        <span>{t('email')} *</span>
+                        <input type="email" value={f.email} onChange={(e) => set('email', e.target.value)} autoComplete="email" />
+                      </label>
+                      <label className="fld">
+                        <span>{t('accPassword2')} *</span>
+                        <input type="password" minLength={6} value={f.password} onChange={(e) => set('password', e.target.value)} autoComplete="new-password" />
+                      </label>
+                    </div>
+                  )}
+                  <small className="hint">
+                    {t('accHaveAccount')} <Link to="/hesap">{t('accSignInHere')}</Link>
+                  </small>
+                </div>
+              )}
+
               <label className="chk">
                 <input type="checkbox" checked={f.consent} onChange={(e) => set('consent', e.target.checked)} />
                 <span>{t('consent')} *</span>
@@ -433,7 +485,11 @@ export function Booking() {
             </section>
           )}
 
-          {err && <p className="err" role="alert">{err}</p>}
+          {err && (
+            <p className="err" role="alert">
+              {err} {exists && <Link to="/hesap">{t('accSignInHere')} →</Link>}
+            </p>
+          )}
 
           <div className="bk-nav">
             {step > 1 ? (
