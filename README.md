@@ -15,7 +15,8 @@ Demo girişleri: panel şifresi `admin123`, şoför PIN'i `1234`.
 - Müşteri **Nereden / Nereye** için otel, adres veya havalimanı arar (OpenStreetMap / Photon), **“Konumumu kullan”** ile GPS konumunu alır veya **haritada iğneyle** işaretler (Leaflet + OpenStreetMap altlık). API anahtarı gerekmez.
 - Seçilen nokta, panelde tanımlı bölge merkezlerine ve yarıçaplarına göre otomatik bir **bölgeye** eşlenir; o güzergâh fiyat tablosunda varsa **sabit fiyat**, yoksa aracın **km ücreti** (en düşük ücretle) uygulanır.
 - Şoför ekranında “Alışa git / Varışa git” doğrudan koordinata Google Maps yol tarifi açar; şoföre giden WhatsApp mesajında da harita linkleri bulunur.
-- Yoğun kullanımda arama/harita için ücretli bir sağlayıcıya (Google Places, Mapbox, MapTiler) geçilmesi önerilir; değişiklik `src/lib/geo.ts` ve `src/components/MapPicker.tsx` ile sınırlıdır.
+- **Google Haritalar:** Panel → Ayarlar → *Google Maps API anahtarı* girildiğinde arama (Places API New), adres çözme (Geocoding), harita seçici ve canlı takip haritası Google'a geçer; anahtar boşsa veya reddedilirse otomatik olarak OpenStreetMap'e döner. Render'da `GOOGLE_MAPS_KEY` ortam değişkeniyle de verilebilir.
+  Google Cloud'da açılması gerekenler: **Maps JavaScript API, Places API (New), Geocoding API**. Anahtarı *Websites* kısıtıyla yalnızca sitenizin adresine sınırlayın.
 
 ## Panelden özelleştirilebilenler
 - **Araçlar:** ad, kategori, yolcu & bavul kapasitesi, saatlik ücret, açıklama, özellikler, görsel galerisi, sıralama, gizle/göster

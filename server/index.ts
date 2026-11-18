@@ -47,6 +47,7 @@ async function boot() {
     if (!process.env.ADMIN_PASSWORD) console.warn('[boot] ADMIN_PASSWORD yok, panel şifresi: admin123');
   }
   config.settings.adminPassword = '';
+  if (!config.settings.googleMapsKey && process.env.GOOGLE_MAPS_KEY) config.settings.googleMapsKey = process.env.GOOGLE_MAPS_KEY;
 }
 
 /* ======================= Görünümler (kim neyi görür) ======================= */

@@ -1,4 +1,5 @@
 import type { AppState, Location, Point } from '../types';
+import { loadGoogle, usingGoogle } from './gmaps';
 
 /** İki nokta arası kuş uçuşu mesafe (km) */
 export function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
@@ -74,8 +75,15 @@ function featureToPoint(f: PhotonFeature): Point {
 }
 
 let probe: Promise<boolean> | null = null;
+if (typeof window !== 'undefined') window.addEventListener('vip:maps-fallback', () => (probe = null));
 /** Konum servisleri bu ortamda erişilebilir mi? (bir kez kontrol edilir) */
 export function remoteAvailable(): Promise<boolean> {
+  if (usingGoogle()) {
+    return loadGoogle().then(
+      () => true,
+      () => false,
+    );
+  }
   if (!probe) {
     probe = (async () => {
       try {
@@ -92,7 +100,70 @@ export function remoteAvailable(): Promise<boolean> {
   return probe;
 }
 
+/* ---------------- Google Places (New) ---------------- */
+let gToken: google.maps.places.AutocompleteSessionToken | null = null;
+const gPreds = new Map<string, google.maps.places.PlacePrediction>();
+
+async function searchGoogle(s: AppState, q: string, lang: string): Promise<Point[]> {
+  await loadGoogle(lang);
+  const { AutocompleteSuggestion, AutocompleteSessionToken } = (await google.maps.importLibrary('places')) as google.maps.PlacesLibrary;
+  gToken ??= new AutocompleteSessionToken();
+  const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
+    input: q,
+    sessionToken: gToken,
+    language: lang,
+    region: 'tr',
+    includedRegionCodes: ['tr'],
+    locationBias: { center: { lat: s.settings.mapLat, lng: s.settings.mapLng }, radius: 50000 },
+  });
+  return suggestions
+    .map((x) => x.placePrediction)
+    .filter((p): p is google.maps.places.PlacePrediction => !!p)
+    .map((p) => {
+      gPreds.set(p.placeId, p);
+      return {
+        label: p.mainText?.text || p.text.text,
+        sub: p.secondaryText?.text || undefined,
+        lat: NaN,
+        lng: NaN,
+        placeId: p.placeId,
+        kind: p.types?.includes('airport') ? 'airport' : 'place',
+      } as Point;
+    });
+}
+
+/** Google önerisinin koordinatını çözer (seçim anında, tek istek). */
+export async function resolvePoint(p: Point): Promise<Point> {
+  if (!p.placeId || Number.isFinite(p.lat)) return p;
+  await loadGoogle();
+  const pred = gPreds.get(p.placeId);
+  const { Place } = (await google.maps.importLibrary('places')) as google.maps.PlacesLibrary;
+  const place = pred ? pred.toPlace() : new Place({ id: p.placeId });
+  await place.fetchFields({ fields: ['location', 'displayName', 'formattedAddress'] });
+  gToken = null; // oturum seçimle kapanır
+  const loc = place.location;
+  if (!loc) throw new Error('Konum bulunamadı');
+  return { ...p, lat: loc.lat(), lng: loc.lng(), label: p.label || place.displayName || '', sub: p.sub || place.formattedAddress || undefined };
+}
+
+async function reverseGoogle(lat: number, lng: number, lang: string): Promise<Point | null> {
+  await loadGoogle(lang);
+  const { Geocoder } = (await google.maps.importLibrary('geocoding')) as google.maps.GeocodingLibrary;
+  const { results } = await new Geocoder().geocode({ location: { lat, lng }, language: lang });
+  const r = results.find((x) => x.types.some((t) => ['establishment', 'point_of_interest', 'premise', 'street_address'].includes(t))) ?? results[0];
+  if (!r) return null;
+  const [first, ...rest] = r.formatted_address.split(', ');
+  return { label: first, sub: rest.join(', ') || undefined, lat, lng, kind: 'gps', placeId: r.place_id };
+}
+
+const curLang = () => (typeof document !== 'undefined' ? document.documentElement.lang || 'tr' : 'tr');
+
 export async function searchRemote(s: AppState, q: string, signal?: AbortSignal): Promise<Point[]> {
+  if (usingGoogle()) {
+    const r = await searchGoogle(s, q, curLang());
+    if (signal?.aborted) throw new Error('aborted');
+    return r;
+  }
   const { mapLat, mapLng, searchBbox } = s.settings;
   const u = new URLSearchParams({ q, limit: '8', lat: String(mapLat), lon: String(mapLng) });
   if (searchBbox) u.set('bbox', searchBbox);
@@ -112,6 +183,13 @@ export async function searchRemote(s: AppState, q: string, signal?: AbortSignal)
 
 export async function reverseGeocode(lat: number, lng: number): Promise<Point> {
   const fallback: Point = { label: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, lat, lng, kind: 'gps' };
+  if (usingGoogle()) {
+    try {
+      return (await reverseGoogle(lat, lng, curLang())) ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }
   try {
     const r = await fetch(`${PHOTON}/reverse?lat=${lat}&lon=${lng}&limit=1`);
     if (!r.ok) return fallback;

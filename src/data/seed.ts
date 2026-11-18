@@ -154,6 +154,7 @@ export function createSeed(): AppState {
       mapLat: 36.8969,
       mapLng: 30.7133,
       searchBbox: '29.2,35.8,32.9,37.7',
+      googleMapsKey: '',
       adminPassword: 'admin123',
     },
     vehicles: [

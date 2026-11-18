@@ -47,6 +47,18 @@ export function SettingsPage() {
           </div>
         </Field>
 
+        <h4 className="wide">Harita & adres arama</h4>
+        <Field
+          label="Google Maps API anahtarı"
+          wide
+          hint="Girildiğinde adres/otel arama, harita ve canlı takip Google ile çalışır. Boş bırakılırsa ücretsiz OpenStreetMap kullanılır. Google Cloud'da Maps JavaScript API, Places API (New) ve Geocoding API açık olmalı; anahtarı sitenizin adresiyle sınırlayın."
+        >
+          <div className="inline">
+            <input value={s.googleMapsKey} onChange={(e) => set('googleMapsKey', e.target.value.trim())} placeholder="AIza…" autoComplete="off" spellCheck={false} />
+            {s.googleMapsKey && <span className="pill">Google aktif</span>}
+          </div>
+        </Field>
+
         <h4 className="wide">Güvenlik</h4>
         <Field label="Yeni panel şifresi">
           <div className="inline">

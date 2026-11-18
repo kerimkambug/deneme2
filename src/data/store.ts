@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import type { AppState, Booking, BookingStatus, Driver, LiveLoc } from '../types';
 import { createSeed, STATE_VERSION } from './seed';
+import { registerKeyGetter } from '../lib/gmaps';
 
 /**
  * Veri katmanı. İki modda çalışır:
@@ -61,6 +62,8 @@ if (!REMOTE && typeof window !== 'undefined') {
     }
   });
 }
+
+registerKeyGetter(() => state.settings.googleMapsKey);
 
 export function getState() {
   return state;

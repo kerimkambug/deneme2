@@ -2,9 +2,10 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Crosshair, Loader2, MapPin, Map as MapIcon, Plane, X } from 'lucide-react';
 import { getState, useStore } from '../data/store';
 import { useT } from '../lib/prefs';
-import { currentPosition, remoteAvailable, resolveZone, reverseGeocode, searchLocal, searchRemote } from '../lib/geo';
+import { currentPosition, remoteAvailable, resolvePoint, resolveZone, reverseGeocode, searchLocal, searchRemote } from '../lib/geo';
 import type { Point } from '../types';
 import { MapPicker } from './MapPicker';
+import { usingGoogle } from '../lib/gmaps';
 
 interface Props {
   value: Point | null;
@@ -88,11 +89,23 @@ export function LocationField({ value, onChange, label, variant = 'light', class
 
   const items = [...local, ...remote];
 
-  const pick = (p: Point) => {
-    onChange(withZone(p));
+  const pick = async (p: Point) => {
+    setMsg('');
+    let pt = p;
+    if (p.placeId && !Number.isFinite(p.lat)) {
+      setLocating(true);
+      try {
+        pt = await resolvePoint(p);
+      } catch {
+        setLocating(false);
+        setMsg(t('locNoResult'));
+        return;
+      }
+      setLocating(false);
+    }
+    onChange(withZone(pt));
     setQ('');
     setOpen(false);
-    setMsg('');
   };
 
   const useMine = async () => {
@@ -194,6 +207,7 @@ export function LocationField({ value, onChange, label, variant = 'light', class
             {busy && <li className="locf-note"><Loader2 size={14} className="spin" /> {t('locSearching')}</li>}
             {!busy && q.trim().length >= 3 && items.length === 0 && <li className="locf-note">{t('locNoResult')}</li>}
             {online === false && q.trim().length >= 3 && <li className="locf-note">{t('locOffline')}</li>}
+            {remote.length > 0 && usingGoogle() && <li className="locf-powered">Google</li>}
           </ul>
         </div>
       )}

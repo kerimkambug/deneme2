@@ -7,6 +7,7 @@ import { useT } from '../lib/prefs';
 import { reverseGeocode } from '../lib/geo';
 import type { Point } from '../types';
 import { addBaseLayer } from './mapTiles';
+import { GOOGLE_MAP_ID, loadGoogle, usingGoogle } from '../lib/gmaps';
 
 const pinIcon = L.divIcon({
   className: 'map-pin',
@@ -15,36 +16,94 @@ const pinIcon = L.divIcon({
   iconAnchor: [17, 42],
 });
 
-/** Haritadan konum seçme penceresi (OpenStreetMap altlık, API anahtarı gerekmez) */
+/** Haritadan konum seçme penceresi (Google Haritalar veya OpenStreetMap) */
 export function MapPicker({ initial, onPick, onClose }: { initial: Point | null; onPick: (p: Point) => void; onClose: () => void }) {
   const { t } = useT();
   const el = useRef<HTMLDivElement>(null);
   const [pt, setPt] = useState<Point | null>(initial);
   const [busy, setBusy] = useState(false);
 
+  const place = useRef<(lat: number, lng: number) => void>(() => undefined);
+  const seq = useRef(0);
+  place.current = async (lat: number, lng: number) => {
+    const my = ++seq.current;
+    setBusy(true);
+    const p = await reverseGeocode(lat, lng);
+    if (my === seq.current) {
+      setPt(p);
+      setBusy(false);
+    }
+  };
+
+  // Google Haritalar (anahtar girildiyse)
   useEffect(() => {
-    if (!el.current) return;
+    if (!el.current || !usingGoogle()) return;
+    let alive = true;
+    let cleanup = () => undefined as void;
+    (async () => {
+      try {
+        await loadGoogle(document.documentElement.lang || 'tr');
+        if (!alive || !el.current) return;
+        const { Map: GMap } = (await google.maps.importLibrary('maps')) as google.maps.MapsLibrary;
+        const { AdvancedMarkerElement } = (await google.maps.importLibrary('marker')) as google.maps.MarkerLibrary;
+        const s = getState().settings;
+        const start = initial ?? { lat: s.mapLat, lng: s.mapLng };
+        const map = new GMap(el.current, {
+          center: start,
+          zoom: initial ? 16 : 11,
+          mapId: GOOGLE_MAP_ID,
+          disableDefaultUI: true,
+          zoomControl: true,
+          gestureHandling: 'greedy',
+          clickableIcons: false,
+        });
+        const pin = document.createElement('div');
+        pin.className = 'map-pin gpin';
+        pin.innerHTML = '<span></span>';
+        const marker = new AdvancedMarkerElement({ map: initial ? map : null, position: start, content: pin, gmpDraggable: true });
+        const move = (lat: number, lng: number) => {
+          marker.position = { lat, lng };
+          marker.map = map;
+          place.current(lat, lng);
+        };
+        const l1 = map.addListener('click', (e: google.maps.MapMouseEvent) => e.latLng && move(e.latLng.lat(), e.latLng.lng()));
+        const l2 = marker.addListener('dragend', () => {
+          const p = marker.position as google.maps.LatLngLiteral | null;
+          if (p) place.current(Number(p.lat), Number(p.lng));
+        });
+        cleanup = () => {
+          l1.remove();
+          l2.remove();
+          marker.map = null;
+        };
+      } catch {
+        /* Google yüklenemezse aşağıdaki OpenStreetMap haritası devreye girmez; kullanıcı aramayla seçebilir */
+      }
+    })();
+    return () => {
+      alive = false;
+      cleanup();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // OpenStreetMap (anahtar yoksa)
+  useEffect(() => {
+    if (!el.current || usingGoogle()) return;
     const s = getState().settings;
     const start = initial ?? { lat: s.mapLat, lng: s.mapLng };
     const map = L.map(el.current, { zoomControl: true, attributionControl: true }).setView([start.lat, start.lng], initial ? 15 : 10);
     addBaseLayer(map);
     const marker = L.marker([start.lat, start.lng], { draggable: true, icon: pinIcon, opacity: initial ? 1 : 0 }).addTo(map);
 
-    let seq = 0;
-    const place = async (lat: number, lng: number) => {
+    const put = (lat: number, lng: number) => {
       marker.setLatLng([lat, lng]).setOpacity(1);
-      const my = ++seq;
-      setBusy(true);
-      const p = await reverseGeocode(lat, lng);
-      if (my === seq) {
-        setPt(p);
-        setBusy(false);
-      }
+      place.current(lat, lng);
     };
-    map.on('click', (e: L.LeafletMouseEvent) => place(e.latlng.lat, e.latlng.lng));
+    map.on('click', (e: L.LeafletMouseEvent) => put(e.latlng.lat, e.latlng.lng));
     marker.on('dragend', () => {
       const ll = marker.getLatLng();
-      place(ll.lat, ll.lng);
+      place.current(ll.lat, ll.lng);
     });
     setTimeout(() => map.invalidateSize(), 50);
     return () => {

@@ -50,6 +50,8 @@ export interface Point {
   /** Düştüğü bölge (fiyat için) */
   zoneId?: string;
   kind?: 'airport' | 'region' | 'place' | 'gps';
+  /** Google yer kimliği (koordinat seçimde çözülür) */
+  placeId?: string;
 }
 
 export interface RoutePrice {
@@ -201,6 +203,8 @@ export interface Settings {
   mapLat: number;
   mapLng: number;
   searchBbox: string;
+  /** Google Maps tarayıcı anahtarı (boşsa OpenStreetMap kullanılır) */
+  googleMapsKey: string;
   adminPassword: string;
 }
 
