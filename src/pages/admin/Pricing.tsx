@@ -1,8 +1,10 @@
 import { ask, notify } from '../../components/dialog';
 import { useMemo, useState } from 'react';
-import { Plus, Star, Trash2, Percent } from 'lucide-react';
+import { MapPin, Plus, Star, Trash2, Percent } from 'lucide-react';
 import { uid, update, useStore } from '../../data/store';
-import type { LocationKind } from '../../types';
+import type { LocationKind, Point } from '../../types';
+import { LocationField } from '../../components/LocationField';
+import { mapLink } from '../../lib/geo';
 import { Field, L10nInput, PageHead, Toggle, toast } from './ui';
 
 export function Pricing() {
@@ -10,7 +12,7 @@ export function Pricing() {
   const [tab, setTab] = useState<'prices' | 'places' | 'extras' | 'rules'>('prices');
   const [filter, setFilter] = useState('');
   const [nf, setNf] = useState({ from: '', to: '' });
-  const [nl, setNl] = useState({ name: '', kind: 'region' as LocationKind, code: '' });
+  const [nl, setNl] = useState({ name: '', kind: 'region' as LocationKind, code: '', point: null as Point | null, radius: 5 });
   const [pct, setPct] = useState(10);
   const vehicles = s.vehicles;
   const name = (id: string) => s.locations.find((l) => l.id === id)?.name ?? id;
@@ -130,7 +132,12 @@ export function Pricing() {
         <>
           <div className="apanel newroute">
             <b>Yeni nokta</b>
+            <div className="newloc-search">
+              <LocationField label="Konum (arayın veya haritadan seçin)" value={nl.point} onChange={(p) => setNl({ ...nl, point: p, name: nl.name || (p?.label ?? '') })} />
+            </div>
             <input placeholder="Ad (ör. Çolaklı)" value={nl.name} onChange={(e) => setNl({ ...nl, name: e.target.value })} />
+            <input className="sm" type="number" min={1} title="Yarıçap (km)" value={nl.radius} onChange={(e) => setNl({ ...nl, radius: +e.target.value })} />
+            <small>km</small>
             <select value={nl.kind} onChange={(e) => setNl({ ...nl, kind: e.target.value as LocationKind })}>
               <option value="region">Bölge / ilçe</option>
               <option value="airport">Havalimanı / liman</option>
@@ -139,9 +146,9 @@ export function Pricing() {
             <button
               className="abtn abtn-primary abtn-sm"
               onClick={() => {
-                if (!nl.name.trim()) return;
-                update((x) => { x.locations.push({ id: uid('l_'), name: nl.name.trim(), kind: nl.kind, code: nl.code || undefined }); });
-                setNl({ name: '', kind: 'region', code: '' });
+                if (!nl.name.trim() || !nl.point) return notify('Ad ve konum seçin.');
+                update((x) => { x.locations.push({ id: uid('l_'), name: nl.name.trim(), kind: nl.kind, code: nl.code || undefined, lat: nl.point!.lat, lng: nl.point!.lng, radiusKm: nl.kind === 'airport' ? 3 : nl.radius }); });
+                setNl({ name: '', kind: 'region', code: '', point: null, radius: 5 });
                 toast('Eklendi');
               }}
             ><Plus size={14} /> Ekle</button>
@@ -154,6 +161,12 @@ export function Pricing() {
                   <span className={`pill ${l.kind === 'airport' ? 'pill-gold' : ''}`}>{l.kind === 'airport' ? 'Havalimanı' : 'Bölge'}</span>
                   <input value={l.name} onChange={(e) => update((x) => { x.locations.find((y) => y.id === l.id)!.name = e.target.value; })} />
                   {l.kind === 'airport' && <input className="sm" value={l.code ?? ''} onChange={(e) => update((x) => { x.locations.find((y) => y.id === l.id)!.code = e.target.value.toUpperCase(); })} />}
+                  <label className="rad" title="Bu yarıçap içindeki adresler bu bölgeye sayılır">
+                    <input type="number" min={1} value={l.radiusKm ?? ''} onChange={(e) => update((x) => { x.locations.find((y) => y.id === l.id)!.radiusKm = +e.target.value; })} /> km
+                  </label>
+                  {l.lat != null && l.lng != null ? (
+                    <a className="maplink" href={mapLink({ lat: l.lat, lng: l.lng })} target="_blank" rel="noopener noreferrer"><MapPin size={13} /> {l.lat.toFixed(3)}, {l.lng.toFixed(3)}</a>
+                  ) : <em className="tx-warn">Konum yok</em>}
                   <small>{n} güzergâh</small>
                   <button className="aicon" aria-label="Sil" onClick={async () => (await ask(`${l.name} ve ${n} güzergâhı silinsin mi?`, { danger: true, okText: 'Sil' })) && update((x) => { x.locations = x.locations.filter((y) => y.id !== l.id); x.routes = x.routes.filter((r) => r.from !== l.id && r.to !== l.id); })}><Trash2 size={15} /></button>
                 </div>
@@ -188,6 +201,7 @@ export function Pricing() {
           <Field label="Gece bitiş"><input type="time" value={s.settings.nightEnd} onChange={(e) => update((x) => { x.settings.nightEnd = e.target.value; })} /></Field>
           <Field label="Ücretsiz bekleme (dk)"><input type="number" min={0} value={s.settings.freeWaitMin} onChange={(e) => update((x) => { x.settings.freeWaitMin = +e.target.value; })} /></Field>
           <Field label="En erken rezervasyon (saat önce)"><input type="number" min={0} value={s.settings.minLeadHours} onChange={(e) => update((x) => { x.settings.minLeadHours = +e.target.value; })} /></Field>
+          <Field label="Yol mesafesi çarpanı" hint="Kuş uçuşu mesafe × bu değer = tahmini yol km (1.3 önerilir)"><input type="number" step="0.05" min={1} value={s.settings.roadFactor} onChange={(e) => update((x) => { x.settings.roadFactor = +e.target.value; })} /></Field>
           <h4 className="wide">Döviz kurları (1 EUR =)</h4>
           {(['TRY', 'USD', 'GBP'] as const).map((c) => (
             <Field key={c} label={c}><input type="number" step="0.01" min={0} value={s.settings.rates[c]} onChange={(e) => update((x) => { x.settings.rates[c] = +e.target.value; })} /></Field>

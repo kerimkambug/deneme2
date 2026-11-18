@@ -11,12 +11,14 @@
     "build:demo": "tsc -b && VITE_HASH=1 VITE_DEMO=1 VITE_BASE=./ vite build --outDir dist-demo"
   },
   "dependencies": {
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.460.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.14",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",

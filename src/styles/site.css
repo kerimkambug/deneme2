@@ -231,6 +231,10 @@
   flex-direction: column;
   color: var(--on-ink);
   background: var(--ink);
+}
+.hero-clip {
+  position: absolute;
+  inset: 0;
   overflow: hidden;
 }
 .hero-bg {
@@ -264,6 +268,7 @@
 }
 .hero-in {
   position: relative;
+  z-index: 3;
   flex: 1;
   display: grid;
   align-content: center;
@@ -1855,5 +1860,387 @@
   }
   .faq-a p {
     padding-right: 0;
+  }
+}
+
+/* =================== LOCATION FIELD =================== */
+.locf {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.locf-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.locf-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper-2);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.locf-box:focus-within,
+.locf-box.open {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.locf-box input {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  padding: 0 14px;
+  border: 0;
+  outline: none;
+  background: transparent;
+}
+.locf-value {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px 6px 14px;
+  text-align: left;
+}
+.locf-value > svg {
+  flex: none;
+  color: color-mix(in srgb, var(--accent) 75%, #000);
+}
+.locf-value span {
+  display: grid;
+  min-width: 0;
+  line-height: 1.25;
+}
+.locf-value b,
+.locf-value small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.locf-value b {
+  font-weight: 700;
+}
+.locf-value small {
+  font-size: 12px;
+  color: var(--muted);
+}
+.locf-clear {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-right: 6px;
+  border-radius: 50%;
+  color: var(--muted);
+  flex: none;
+}
+.locf-clear:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+.locf-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.locf-meta .out {
+  color: var(--warn);
+}
+.locf-meta button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--accent) 70%, #000);
+}
+.locf-msg {
+  font-size: 12.5px;
+  color: var(--bad);
+}
+.locf-pop {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 40;
+  width: max(100%, min(420px, calc(100vw - 32px)));
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 16px;
+  background: #fff;
+  color: var(--text);
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  animation: fadeUp 0.2s var(--ease);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.locf-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #eee9df;
+}
+.locf-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border-radius: 10px;
+  background: #f5f2ec;
+  font-size: 13.5px;
+  font-weight: 700;
+  transition: background 0.2s;
+}
+.locf-actions button:first-child {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.locf-actions button:first-child svg {
+  color: var(--accent);
+}
+.locf-actions button:only-child {
+  grid-column: 1 / -1;
+}
+.locf-pop ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.locf-pop li[role='option'] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.locf-pop li[role='option'] > svg {
+  flex: none;
+  color: color-mix(in srgb, var(--accent) 75%, #000);
+}
+.locf-pop li span {
+  display: grid;
+  min-width: 0;
+  line-height: 1.3;
+}
+.locf-pop li b {
+  font-weight: 600;
+}
+.locf-pop li small {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.locf-pop li.hi {
+  background: #f5f2ec;
+}
+.locf-sep {
+  padding: 10px 10px 4px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.locf-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* dark variant (hero widget) */
+.locf-dark {
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid transparent;
+  transition: border-color 0.2s, background 0.2s;
+}
+.locf-dark:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: rgba(255, 255, 255, 0.08);
+}
+.locf-dark .locf-label {
+  color: var(--on-ink-2);
+}
+.locf-dark .locf-box {
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.locf-dark .locf-box input {
+  height: 30px;
+  padding: 0;
+  color: var(--on-ink);
+}
+.locf-dark .locf-box input::placeholder {
+  color: rgba(243, 239, 231, 0.45);
+}
+.locf-dark .locf-value {
+  padding: 0;
+  color: var(--on-ink);
+}
+.locf-dark .locf-value > svg {
+  color: var(--accent);
+}
+.locf-dark .locf-value small,
+.locf-dark .locf-meta {
+  color: var(--on-ink-2);
+}
+.locf-dark .locf-clear {
+  margin: 0 -6px 0 0;
+  color: var(--on-ink-2);
+}
+.locf-dark .locf-clear:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.locf-dark .locf-meta {
+  display: none;
+}
+.locf-dark .locf-pop {
+  left: -14px;
+  top: calc(100% + 10px);
+  margin: 0;
+}
+
+/* map dialog */
+.mapdlg-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(12, 13, 16, 0.6);
+  backdrop-filter: blur(3px);
+  animation: fadeIn 0.2s;
+}
+.mapdlg {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  width: min(880px, 100%);
+  height: min(680px, calc(100vh - 40px));
+  border-radius: 20px;
+  overflow: hidden;
+  background: #fff;
+  color: var(--text);
+  box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.5);
+  animation: fadeUp 0.3s var(--ease);
+}
+.mapdlg-h,
+.mapdlg-f {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+}
+.mapdlg-h b {
+  font-size: 15px;
+}
+.mapdlg-map {
+  min-height: 0;
+  background: #e8e4dc;
+}
+.mapdlg-addr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.mapdlg-addr span {
+  display: grid;
+  min-width: 0;
+}
+.mapdlg-addr b,
+.mapdlg-addr small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mapdlg-addr small {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.map-pin span {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 30px;
+  height: 30px;
+  margin-left: -15px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: var(--ink);
+  border: 3px solid var(--accent);
+  box-shadow: 0 8px 16px -6px rgba(0, 0, 0, 0.6);
+}
+.map-pin span::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.sum-km {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.maplink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--accent) 70%, #000);
+}
+@media (max-width: 640px) {
+  .mapdlg-bg {
+    padding: 0;
+  }
+  .mapdlg {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
+  .mapdlg-f {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .locf-dark .locf-pop {
+    left: -14px;
+    right: -14px;
+    width: auto;
   }
 }

@@ -6,6 +6,7 @@ import { usePrefs, useT } from '../../lib/prefs';
 import { STATUS_LABEL } from '../../lib/i18n';
 import { dateLabel, money, telLink, waLink } from '../../lib/format';
 import type { BookingStatus } from '../../types';
+import { mapLink, pointText } from '../../lib/geo';
 
 const FLOW: BookingStatus[] = ['new', 'confirmed', 'assigned', 'on_way', 'arrived', 'onboard', 'completed'];
 
@@ -48,6 +49,8 @@ export function Track() {
   }
 
   const loc = (id?: string) => st.locations.find((l) => l.id === id)?.name ?? '';
+  const fromTxt = pointText(b.fromPoint) || loc(b.fromId);
+  const toTxt = pointText(b.toPoint) || loc(b.toId);
   const v = st.vehicles.find((x) => x.id === b.vehicleId);
   const d = st.drivers.find((x) => x.id === b.driverId);
   const showDriver = d && ['assigned', 'on_way', 'arrived', 'onboard'].includes(b.status);
@@ -57,7 +60,8 @@ export function Track() {
 
   const msg = [
     `${s.companyName} — ${b.code}`,
-    `${loc(b.fromId)}${b.fromDetail ? ` (${b.fromDetail})` : ''}${b.toId ? ` → ${loc(b.toId)}${b.toDetail ? ` (${b.toDetail})` : ''}` : ` · ${b.hours} h`}`,
+    `${fromTxt}${b.fromDetail ? ` (${b.fromDetail})` : ''}${b.type === 'transfer' ? ` → ${toTxt}${b.toDetail ? ` (${b.toDetail})` : ''}` : ` · ${b.hours} h`}`,
+    b.fromPoint && mapLink(b.fromPoint),
     `${b.date} ${b.time}${b.roundTrip ? ` / ↩ ${b.returnDate} ${b.returnTime}` : ''}`,
     `${v?.name ?? ''} · ${b.adults + b.children} pax · ${b.luggage} bags`,
     b.flightNo && `✈ ${b.flightNo}`,
@@ -153,8 +157,9 @@ export function Track() {
           <dl className="dl">
             <dt>{t('routeLbl')}</dt>
             <dd>
-              {loc(b.fromId)}{b.fromDetail && ` · ${b.fromDetail}`}
-              {b.toId ? <> → {loc(b.toId)}{b.toDetail && ` · ${b.toDetail}`}</> : ` · ${b.hours} ${t('hoursLbl')}`}
+              {fromTxt}{b.fromDetail && ` · ${b.fromDetail}`}
+              {b.type === 'transfer' ? <> → {toTxt}{b.toDetail && ` · ${b.toDetail}`}</> : ` · ${b.hours} ${t('hoursLbl')}`}
+              {b.distanceKm ? ` · ~${b.distanceKm} km` : ''}
             </dd>
             <dt>{t('dateLbl')}</dt>
             <dd>

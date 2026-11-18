@@ -5,6 +5,7 @@ import { setBookingStatus, useStore } from '../../data/store';
 import { STATUS_LABEL } from '../../lib/i18n';
 import { dateLabel, eur, mapsLink, telLink, todayIso, waLink } from '../../lib/format';
 import { Brand } from '../../components/Brand';
+import { directionsLink, pointText } from '../../lib/geo';
 import type { Booking, BookingStatus } from '../../types';
 
 const KEY = 'vip:driver';
@@ -79,7 +80,10 @@ function Job({ b, onSign }: { b: Booking; onSign: () => void }) {
   const v = s.vehicles.find((x) => x.id === b.vehicleId);
   const next = NEXT[b.status];
   const active = ['on_way', 'arrived', 'onboard'].includes(b.status);
-  const dest = b.status === 'onboard' ? `${b.toDetail || ''} ${loc(b.toId)}` : `${b.fromDetail || ''} ${loc(b.fromId)}`;
+  const target = b.status === 'onboard' ? b.toPoint : b.fromPoint;
+  const navHref = target ? directionsLink(target) : mapsLink(b.status === 'onboard' ? `${b.toDetail || ''} ${loc(b.toId)}` : `${b.fromDetail || ''} ${loc(b.fromId)}`);
+  const fromName = b.fromPoint?.label || loc(b.fromId);
+  const toName = b.toPoint?.label || loc(b.toId);
   const extras = Object.entries(b.extras).map(([id, n]) => `${s.extras.find((e) => e.id === id)?.name.tr ?? id} ×${n}`);
 
   const advance = async () => {
@@ -98,7 +102,7 @@ function Job({ b, onSign }: { b: Booking; onSign: () => void }) {
       <button className="djob-h" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <span className="djob-time">{b.time}</span>
         <span className="djob-main">
-          <b>{loc(b.fromId)} → {b.toId ? loc(b.toId) : `${b.hours} saat`}</b>
+          <b>{fromName} → {b.type === 'transfer' ? toName : `${b.hours} saat`}</b>
           <small>{b.customer.name} · <Users size={12} /> {b.adults + b.children} · <Luggage size={12} /> {b.luggage}</small>
         </span>
         <span className={`badge st-${b.status}`}>{STATUS_LABEL[b.status].tr}</span>
@@ -109,8 +113,8 @@ function Job({ b, onSign }: { b: Booking; onSign: () => void }) {
         <div className="djob-b">
           <dl className="adl">
             {b.flightNo && (<><dt>Uçuş</dt><dd><Plane size={14} /> <b>{b.flightNo}</b></dd></>)}
-            <dt>Alış</dt><dd>{loc(b.fromId)}{b.fromDetail && ` · ${b.fromDetail}`}</dd>
-            {b.toId && (<><dt>Varış</dt><dd>{loc(b.toId)}{b.toDetail && ` · ${b.toDetail}`}</dd></>)}
+            <dt>Alış</dt><dd>{pointText(b.fromPoint) || loc(b.fromId)}{b.fromDetail && ` · ${b.fromDetail}`}</dd>
+            {b.type === 'transfer' && (<><dt>Varış</dt><dd>{pointText(b.toPoint) || loc(b.toId)}{b.toDetail && ` · ${b.toDetail}`}{b.distanceKm ? ` · ~${b.distanceKm} km` : ''}</dd></>)}
             <dt>Araç</dt><dd>{v?.name}</dd>
             {extras.length > 0 && (<><dt>Ekstra</dt><dd><Baby size={14} /> {extras.join(', ')}</dd></>)}
             {b.notes && (<><dt>Not</dt><dd className="tx-warn">{b.notes}</dd></>)}
@@ -119,7 +123,7 @@ function Job({ b, onSign }: { b: Booking; onSign: () => void }) {
           <div className="djob-acts">
             <a href={telLink(b.customer.phone)}><Phone size={20} /> Ara</a>
             <a href={waLink(b.customer.phone)} target="_blank" rel="noopener noreferrer"><MessageCircle size={20} /> Yaz</a>
-            <a href={mapsLink(dest.trim())} target="_blank" rel="noopener noreferrer"><MapPinned size={20} /> Yol tarifi</a>
+            <a href={navHref} target="_blank" rel="noopener noreferrer"><MapPinned size={20} /> {b.status === 'onboard' ? 'Varışa git' : 'Alışa git'}</a>
             <button onClick={onSign}><Signature size={20} /> Tabela</button>
           </div>
           {next && (

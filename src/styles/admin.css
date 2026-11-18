@@ -1720,3 +1720,27 @@ body:has(.drv) {
   border-color: var(--bad);
   color: #fff;
 }
+.newloc-search {
+  flex: 1 1 320px;
+  min-width: 260px;
+}
+.newloc-search .locf-label {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12.5px;
+  color: #4b4943;
+}
+.rad {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.rad input {
+  width: 64px !important;
+  min-height: 34px !important;
+}
+.newroute {
+  align-items: flex-end;
+}

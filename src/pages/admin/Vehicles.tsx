@@ -8,7 +8,7 @@ import { Field, GalleryInput, L10nInput, Modal, PageHead, Toggle, toast } from '
 
 const ART: Record<VehicleArt, string> = { sedan: 'Sedan', van: 'Minivan', sprinter: 'Minibüs', bus: 'Midibüs / Otobüs' };
 const empty = (): Vehicle => ({
-  id: uid('v_'), name: '', art: 'van', pax: 6, luggage: 6, hourlyRate: 0, active: true, images: [],
+  id: uid('v_'), name: '', art: 'van', pax: 6, luggage: 6, hourlyRate: 0, perKm: 0, minFare: 0, active: true, images: [],
   category: { tr: '', en: '', ru: '' }, description: { tr: '', en: '', ru: '' }, features: { tr: '', en: '', ru: '' },
 });
 
@@ -43,6 +43,8 @@ function Editor({ initial, onClose }: { initial: Vehicle; onClose: () => void })
         <Field label="Yolcu kapasitesi"><input type="number" min={1} value={v.pax} onChange={(e) => set('pax', +e.target.value)} /></Field>
         <Field label="Bavul kapasitesi"><input type="number" min={0} value={v.luggage} onChange={(e) => set('luggage', +e.target.value)} /></Field>
         <Field label="Saatlik ücret (EUR)" hint="0 ise saatlik kiralamada teklif istenir"><input type="number" min={0} value={v.hourlyRate} onChange={(e) => set('hourlyRate', +e.target.value)} /></Field>
+        <Field label="Km ücreti (EUR)" hint="Fiyat tablosunda olmayan konumlar için. 0 ise teklif istenir"><input type="number" min={0} step="0.1" value={v.perKm} onChange={(e) => set('perKm', +e.target.value)} /></Field>
+        <Field label="En düşük ücret (EUR)" hint="Km bazlı fiyat bunun altına inmez"><input type="number" min={0} value={v.minFare} onChange={(e) => set('minFare', +e.target.value)} /></Field>
         <Field label="Durum"><Toggle checked={v.active} onChange={(x) => set('active', x)} label={v.active ? 'Sitede görünür' : 'Gizli'} /></Field>
         <L10nInput label="Kategori (ör. VIP Minivan)" value={v.category} onChange={(x) => set('category', x)} />
         <L10nInput label="Açıklama" value={v.description} onChange={(x) => set('description', x)} multiline />

@@ -1,4 +1,5 @@
-import type { AppState, RoutePrice } from '../types';
+import type { AppState, Point, RoutePrice } from '../types';
+import { roadKm } from './geo';
 
 export function findRoute(s: AppState, from?: string, to?: string): RoutePrice | undefined {
   if (!from || !to) return undefined;
@@ -34,6 +35,8 @@ export interface QuoteInput {
   returnTime?: string;
   hours?: number;
   extras: Record<string, number>;
+  fromPoint?: Point | null;
+  toPoint?: Point | null;
 }
 
 export interface Quote {
@@ -44,19 +47,28 @@ export interface Quote {
   extras: number;
   total: number;
   onRequest: boolean;
+  /** Tahmini yol mesafesi */
+  km: number | null;
+  /** Fiyat tablo yerine km'den hesaplandı */
+  byDistance: boolean;
 }
 
 export function quote(s: AppState, q: QuoteInput): Quote {
   const v = s.vehicles.find((x) => x.id === q.vehicleId);
   let base = 0;
   let onRequest = false;
+  let byDistance = false;
+  const km = q.type === 'transfer' ? roadKm(s, q.fromPoint, q.toPoint) : null;
   if (q.type === 'hourly') {
     base = (v?.hourlyRate ?? 0) * Math.max(1, q.hours ?? 1);
     onRequest = !base;
   } else {
     const p = routePrice(s, q.fromId, q.toId, q.vehicleId);
-    if (p == null) onRequest = true;
-    else base = p;
+    if (p != null) base = p;
+    else if (km != null && v && v.perKm > 0) {
+      base = Math.max(v.minFare || 0, Math.round((km * v.perKm) / 5) * 5);
+      byDistance = true;
+    } else onRequest = true;
   }
   const ret = q.type === 'transfer' && q.roundTrip && !onRequest ? base : 0;
   const discount = ret ? Math.round(((base + ret) * s.settings.roundTripDiscount) / 100) : 0;
@@ -68,7 +80,7 @@ export function quote(s: AppState, q: QuoteInput): Quote {
     .filter((e) => e.active)
     .reduce((sum, e) => sum + (q.extras[e.id] ?? 0) * e.price * (ret ? 2 : 1), 0);
   const total = onRequest ? 0 : base + ret - discount + night + extras;
-  return { base, ret, discount, night, extras, total, onRequest };
+  return { base, ret, discount, night, extras, total, onRequest, km, byDistance };
 }
 
 /** Bir araç için en düşük tek yön fiyat (vitrin için) */

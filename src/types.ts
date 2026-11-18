@@ -20,6 +20,10 @@ export interface Vehicle {
   art: VehicleArt;
   /** Saatlik kiralama ücreti (EUR) */
   hourlyRate: number;
+  /** Tabloda olmayan güzergâhlar için km ücreti (EUR, 0 = teklif iste) */
+  perKm: number;
+  /** Km bazlı fiyatta en düşük ücret (EUR) */
+  minFare: number;
   active: boolean;
 }
 
@@ -30,6 +34,22 @@ export interface Location {
   name: string;
   kind: LocationKind;
   code?: string;
+  /** Bölge merkezi */
+  lat?: number;
+  lng?: number;
+  /** Bu yarıçap (km) içindeki konumlar bu bölgeye sayılır */
+  radiusKm?: number;
+}
+
+/** Müşterinin seçtiği gerçek konum */
+export interface Point {
+  label: string;
+  sub?: string;
+  lat: number;
+  lng: number;
+  /** Düştüğü bölge (fiyat için) */
+  zoneId?: string;
+  kind?: 'airport' | 'region' | 'place' | 'gps';
 }
 
 export interface RoutePrice {
@@ -84,6 +104,9 @@ export interface Booking {
   toId?: string;
   fromDetail: string;
   toDetail: string;
+  fromPoint?: Point;
+  toPoint?: Point;
+  distanceKm?: number;
   date: string;
   time: string;
   roundTrip: boolean;
@@ -172,6 +195,12 @@ export interface Settings {
   freeWaitMin: number;
   minLeadHours: number;
   payments: Record<PaymentMethod, boolean>;
+  /** Kuş uçuşu → yol mesafesi çarpanı */
+  roadFactor: number;
+  /** Harita başlangıç merkezi ve arama alanı (minLon,minLat,maxLon,maxLat) */
+  mapLat: number;
+  mapLng: number;
+  searchBbox: string;
   adminPassword: string;
 }
 

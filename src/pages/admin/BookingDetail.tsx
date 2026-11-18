@@ -1,9 +1,10 @@
 import { ask } from '../../components/dialog';
 import { useState } from 'react';
-import { AlertTriangle, MessageCircle, Phone, Trash2, Send, ExternalLink } from 'lucide-react';
+import { AlertTriangle, MapPin, MessageCircle, Phone, Trash2, Send, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { patchBooking, setBookingStatus, update, useStore } from '../../data/store';
 import { STATUS_LABEL } from '../../lib/i18n';
+import { mapLink, pointText } from '../../lib/geo';
 import { appUrl, dateLabel, eur, money, telLink, waLink } from '../../lib/format';
 import type { AppState, Booking, BookingStatus } from '../../types';
 import { Modal, StatusBadge, toast } from './ui';
@@ -27,10 +28,15 @@ export function locName(s: AppState, id?: string) {
   return s.locations.find((l) => l.id === id)?.name ?? '';
 }
 
+export function placeText(s: AppState, p: Booking['fromPoint'], id?: string, detail?: string) {
+  const base = p ? p.label : locName(s, id);
+  return `${base}${detail ? ` (${detail})` : ''}`;
+}
+
 export function routeText(s: AppState, b: Booking) {
-  const from = `${locName(s, b.fromId)}${b.fromDetail ? ` (${b.fromDetail})` : ''}`;
+  const from = placeText(s, b.fromPoint, b.fromId, b.fromDetail);
   if (b.type === 'hourly') return `${from} · ${b.hours} saat`;
-  return `${from} → ${locName(s, b.toId)}${b.toDetail ? ` (${b.toDetail})` : ''}`;
+  return `${from} → ${placeText(s, b.toPoint, b.toId, b.toDetail)}`;
 }
 
 function customerMessage(s: AppState, b: Booking) {
@@ -57,6 +63,8 @@ function driverMessage(s: AppState, b: Booking) {
     `${b.date} ${b.time}`,
     routeText(s, b),
     b.flightNo && `Uçuş: ${b.flightNo}`,
+    b.fromPoint && `📍 Alış: ${mapLink(b.fromPoint)}`,
+    b.toPoint && `🏁 Varış: ${mapLink(b.toPoint)}`,
     `Müşteri: ${b.customer.name} · ${b.customer.phone}`,
     `Tabela: ${b.nameSign}`,
     `${b.adults}+${b.children} kişi · ${b.luggage} bavul · ${v?.name ?? ''}`,
@@ -117,7 +125,21 @@ export function BookingDetail({ id, onClose }: { id: string; onClose: () => void
             <h4>Transfer</h4>
             <dl className="adl">
               <dt>Tarih</dt><dd><b>{dateLabel(b.date, 'tr')} · {b.time}</b></dd>
-              <dt>Güzergâh</dt><dd>{routeText(s, b)}</dd>
+              <dt>Alış</dt>
+              <dd>
+                {pointText(b.fromPoint) || locName(s, b.fromId)}{b.fromDetail && ` · ${b.fromDetail}`}
+                {b.fromPoint && <a className="maplink" href={mapLink(b.fromPoint)} target="_blank" rel="noopener noreferrer"><MapPin size={13} /> Harita</a>}
+              </dd>
+              {b.type === 'transfer' ? (
+                <>
+                  <dt>Varış</dt>
+                  <dd>
+                    {pointText(b.toPoint) || locName(s, b.toId)}{b.toDetail && ` · ${b.toDetail}`}
+                    {b.toPoint && <a className="maplink" href={mapLink(b.toPoint)} target="_blank" rel="noopener noreferrer"><MapPin size={13} /> Harita</a>}
+                  </dd>
+                </>
+              ) : (<><dt>Süre</dt><dd>{b.hours} saat</dd></>)}
+              {(b.fromId || b.toId) && (<><dt>Bölge</dt><dd>{locName(s, b.fromId) || 'Bölge dışı'} → {b.type === 'transfer' ? locName(s, b.toId) || 'Bölge dışı' : '—'}{b.distanceKm ? ` · ~${b.distanceKm} km` : ''}</dd></>)}
               {b.roundTrip && (<><dt>Dönüş</dt><dd>{dateLabel(b.returnDate!, 'tr')} · {b.returnTime}{b.returnFlightNo && ` · ✈ ${b.returnFlightNo}`}</dd></>)}
               {b.flightNo && (<><dt>Uçuş</dt><dd>✈ {b.flightNo}</dd></>)}
               <dt>Araç</dt><dd>{v?.name ?? '—'}</dd>

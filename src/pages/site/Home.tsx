@@ -86,10 +86,12 @@ export function Home() {
     <>
       {/* HERO */}
       <section className="hero" id="anasayfa">
-        <div className="hero-bg" style={s.heroImage ? { backgroundImage: `url("${s.heroImage}")` } : undefined}>
-          {!s.heroImage && <HeroDecor />}
+        <div className="hero-clip">
+          <div className="hero-bg" style={s.heroImage ? { backgroundImage: `url("${s.heroImage}")` } : undefined}>
+            {!s.heroImage && <HeroDecor />}
+          </div>
+          <div className="hero-shade" />
         </div>
-        <div className="hero-shade" />
         <div className="wrap hero-in">
           <div className="hero-copy">
             <span className="kicker hero-anim" style={{ ['--d' as string]: '0ms' }}>{tl(s.tagline)}</span>

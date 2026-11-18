@@ -4,15 +4,20 @@ import { ArrowLeftRight, CalendarDays, Clock3, MapPin, Users, Hourglass } from '
 import { useStore } from '../../data/store';
 import { useT } from '../../lib/prefs';
 import { todayIso } from '../../lib/format';
-import { LocationSelect } from './LocationSelect';
+import { LocationField } from '../../components/LocationField';
+import { encodePoint, locationPoint } from '../../lib/geo';
+import type { Point } from '../../types';
 
 export function BookingWidget() {
   const { t } = useT();
   const nav = useNavigate();
   const locations = useStore((s) => s.locations);
   const [type, setType] = useState<'transfer' | 'hourly'>('transfer');
-  const [from, setFrom] = useState(locations.find((l) => l.kind === 'airport')?.id ?? '');
-  const [to, setTo] = useState('');
+  const [from, setFrom] = useState<Point | null>(() => {
+    const a = locations.find((l) => l.kind === 'airport');
+    return a ? locationPoint(a) : null;
+  });
+  const [to, setTo] = useState<Point | null>(null);
   const [date, setDate] = useState(todayIso(1));
   const [time, setTime] = useState('12:00');
   const [pax, setPax] = useState(2);
@@ -21,9 +26,10 @@ export function BookingWidget() {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    const q = new URLSearchParams({ type, from, date, time, pax: String(pax) });
+    const q = new URLSearchParams({ type, date, time, pax: String(pax) });
+    if (from) q.set('fp', encodePoint(from));
     if (type === 'transfer') {
-      if (to) q.set('to', to);
+      if (to) q.set('tp', encodePoint(to));
       if (ret) q.set('ret', '1');
     } else q.set('hours', String(hours));
     nav(`/rezervasyon?${q.toString()}`);
@@ -39,19 +45,19 @@ export function BookingWidget() {
         ))}
       </div>
       <div className={`widget-grid ${type}`}>
-        <label className="fld fld-from">
-          <span><MapPin size={14} /> {type === 'transfer' ? t('wFrom') : t('wPickup')}</span>
-          <LocationSelect value={from} onChange={setFrom} />
-        </label>
+        <LocationField
+          className="fld-from"
+          variant="dark"
+          label={<><MapPin size={14} /> {type === 'transfer' ? t('wFrom') : t('wPickup')}</>}
+          value={from}
+          onChange={setFrom}
+        />
         {type === 'transfer' ? (
           <>
             <button type="button" className="swap" aria-label={t('wSwap')} onClick={() => { setFrom(to); setTo(from); }}>
               <ArrowLeftRight size={16} />
             </button>
-            <label className="fld fld-to">
-              <span><MapPin size={14} /> {t('wTo')}</span>
-              <LocationSelect value={to} onChange={setTo} exclude={from} />
-            </label>
+            <LocationField className="fld-to" variant="dark" label={<><MapPin size={14} /> {t('wTo')}</>} value={to} onChange={setTo} />
           </>
         ) : (
           <label className="fld fld-to">

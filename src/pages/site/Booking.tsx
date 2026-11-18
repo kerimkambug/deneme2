@@ -7,8 +7,9 @@ import { dateLabel, hoursUntil, money, todayIso } from '../../lib/format';
 import { fmt } from '../../lib/i18n';
 import { quote } from '../../lib/pricing';
 import { VehicleMedia } from '../../components/VehicleMedia';
-import { LocationSelect } from './LocationSelect';
-import type { Booking as TBooking, PaymentMethod } from '../../types';
+import { LocationField, withZone } from '../../components/LocationField';
+import { decodePoint, haversineKm, locationPoint, pointText } from '../../lib/geo';
+import type { Booking as TBooking, PaymentMethod, Point } from '../../types';
 
 function Stepper({ value, onChange, min = 0, max = 20, label, icon }: { value: number; onChange: (n: number) => void; min?: number; max?: number; label: string; icon: React.ReactNode }) {
   return (
@@ -32,14 +33,22 @@ export function Booking() {
   const [qp] = useSearchParams();
 
   const vehicles = st.vehicles.filter((v) => v.active);
-  const [step, setStep] = useState(qp.get('from') && (qp.get('to') || qp.get('type') === 'hourly') ? 2 : 1);
+  const initPoint = (pKey: string, idKey: string, fallbackAirport: boolean): Point | null => {
+    const dp = decodePoint(qp.get(pKey));
+    if (dp) return withZone(dp);
+    const id = qp.get(idKey);
+    const l = st.locations.find((x) => x.id === id) ?? (fallbackAirport ? st.locations.find((x) => x.kind === 'airport') : undefined);
+    return l ? locationPoint(l) : null;
+  };
+  const hasRoute = (qp.get('fp') || qp.get('from')) && (qp.get('tp') || qp.get('to') || qp.get('type') === 'hourly');
+  const [step, setStep] = useState(hasRoute ? 2 : 1);
   const [err, setErr] = useState('');
   const [f, setF] = useState(() => {
     const pax = Math.max(1, Number(qp.get('pax')) || 2);
     return {
       type: (qp.get('type') === 'hourly' ? 'hourly' : 'transfer') as 'transfer' | 'hourly',
-      fromId: qp.get('from') ?? st.locations.find((l) => l.kind === 'airport')?.id ?? '',
-      toId: qp.get('to') ?? '',
+      fromPoint: initPoint('fp', 'from', true),
+      toPoint: initPoint('tp', 'to', false),
       date: qp.get('date') ?? todayIso(1),
       time: qp.get('time') ?? '12:00',
       roundTrip: qp.get('ret') === '1',
@@ -71,25 +80,28 @@ export function Booking() {
   }, [step]);
   useEffect(() => {
     setErr('');
-  }, [step, f.fromId, f.toId, f.vehicleId]);
+  }, [step, f.fromPoint, f.toPoint, f.vehicleId]);
 
   const pax = f.adults + f.children;
   const loc = (id?: string) => st.locations.find((l) => l.id === id);
-  const fromLoc = loc(f.fromId);
-  const toLoc = loc(f.toId);
+  const fromId = f.fromPoint?.zoneId;
+  const toId = f.type === 'transfer' ? f.toPoint?.zoneId : undefined;
+  const fromLoc = loc(fromId);
+  const toLoc = loc(toId);
+  const geoArgs = { fromId, toId, fromPoint: f.fromPoint, toPoint: f.type === 'transfer' ? f.toPoint : null };
   const vehicle = vehicles.find((v) => v.id === f.vehicleId);
   const q = useMemo(
-    () => quote(st, { type: f.type, fromId: f.fromId, toId: f.toId, vehicleId: f.vehicleId, roundTrip: f.roundTrip, time: f.time, returnTime: f.returnTime, hours: f.hours, extras: f.extras }),
+    () => quote(st, { ...geoArgs, type: f.type, vehicleId: f.vehicleId, roundTrip: f.roundTrip, time: f.time, returnTime: f.returnTime, hours: f.hours, extras: f.extras }),
     [st, f],
   );
   const m = (v: number) => money(v, currency, s.rates, lang);
-  const airportPickup = fromLoc?.kind === 'airport';
-  const airportReturn = toLoc?.kind === 'airport';
+  const airportPickup = f.fromPoint?.kind === 'airport' || fromLoc?.kind === 'airport';
+  const airportReturn = f.toPoint?.kind === 'airport' || toLoc?.kind === 'airport';
 
   const validate = (n: number): string => {
     if (n >= 1) {
-      if (!f.fromId || (f.type === 'transfer' && !f.toId)) return t('pickRoute');
-      if (f.fromId === f.toId) return t('sameRoute');
+      if (!f.fromPoint || (f.type === 'transfer' && !f.toPoint)) return t('pickRoute');
+      if (f.type === 'transfer' && f.toPoint && haversineKm(f.fromPoint, f.toPoint) < 0.3) return t('sameRoute');
       if (!f.date || !f.time || (f.roundTrip && (!f.returnDate || !f.returnTime))) return t('pickDate');
       if (hoursUntil(f.date, f.time) < s.minLeadHours) return fmt(t('leadTime'), { h: s.minLeadHours });
     }
@@ -120,8 +132,11 @@ export function Booking() {
       code: bookingCode(),
       createdAt: now,
       type: f.type,
-      fromId: f.fromId,
-      toId: f.type === 'transfer' ? f.toId : undefined,
+      fromId: fromId ?? '',
+      toId: f.type === 'transfer' ? toId ?? '' : undefined,
+      fromPoint: f.fromPoint ?? undefined,
+      toPoint: f.type === 'transfer' ? f.toPoint ?? undefined : undefined,
+      distanceKm: q.km ?? undefined,
       fromDetail: f.fromDetail.trim(),
       toDetail: f.toDetail.trim(),
       date: f.date,
@@ -184,15 +199,13 @@ export function Booking() {
                 ))}
               </div>
               <div className="form-grid">
-                <label className="fld">
-                  <span><MapPin size={14} /> {f.type === 'transfer' ? t('wFrom') : t('wPickup')}</span>
-                  <LocationSelect value={f.fromId} onChange={(v) => set('fromId', v)} required />
-                </label>
+                <LocationField
+                  label={<><MapPin size={14} /> {f.type === 'transfer' ? t('wFrom') : t('wPickup')}</>}
+                  value={f.fromPoint}
+                  onChange={(v) => set('fromPoint', v)}
+                />
                 {f.type === 'transfer' ? (
-                  <label className="fld">
-                    <span><MapPin size={14} /> {t('wTo')}</span>
-                    <LocationSelect value={f.toId} onChange={(v) => set('toId', v)} exclude={f.fromId} required />
-                  </label>
+                  <LocationField label={<><MapPin size={14} /> {t('wTo')}</>} value={f.toPoint} onChange={(v) => set('toPoint', v)} />
                 ) : (
                   <label className="fld">
                     <span>{t('wHours')}</span>
@@ -244,7 +257,7 @@ export function Booking() {
           {step === 2 && (
             <section className="bk-vehicles" key="s2">
               {vehicles.map((v) => {
-                const vq = quote(st, { type: f.type, fromId: f.fromId, toId: f.toId, vehicleId: v.id, roundTrip: f.roundTrip, time: f.time, returnTime: f.returnTime, hours: f.hours, extras: {} });
+                const vq = quote(st, { ...geoArgs, type: f.type, vehicleId: v.id, roundTrip: f.roundTrip, time: f.time, returnTime: f.returnTime, hours: f.hours, extras: {} });
                 const small = v.pax < pax || v.luggage < f.luggage;
                 const sel = v.id === f.vehicleId;
                 return (
@@ -304,13 +317,13 @@ export function Booking() {
                   </label>
                 )}
                 <label className="fld">
-                  <span>{t('pickupAddr')}</span>
-                  <input value={f.fromDetail} onChange={(e) => set('fromDetail', e.target.value)} placeholder={fromLoc?.name} />
+                  <span>{t('addrNote')} · {f.fromPoint?.label}</span>
+                  <input value={f.fromDetail} onChange={(e) => set('fromDetail', e.target.value)} placeholder={airportPickup ? 'Terminal / kapı' : ''} />
                 </label>
                 {f.type === 'transfer' && (
                   <label className="fld">
-                    <span>{t('dropAddr')}</span>
-                    <input value={f.toDetail} onChange={(e) => set('toDetail', e.target.value)} placeholder={toLoc?.name} />
+                    <span>{t('addrNote')} · {f.toPoint?.label}</span>
+                    <input value={f.toDetail} onChange={(e) => set('toDetail', e.target.value)} />
                   </label>
                 )}
                 {f.roundTrip && airportReturn && (
@@ -377,9 +390,10 @@ export function Booking() {
               <dl className="dl">
                 <dt>{t('routeLbl')}</dt>
                 <dd>
-                  {fromLoc?.name}
+                  {pointText(f.fromPoint)}
                   {f.fromDetail && ` · ${f.fromDetail}`}
-                  {f.type === 'transfer' ? <> → {toLoc?.name}{f.toDetail && ` · ${f.toDetail}`}</> : ` · ${f.hours} ${t('hoursLbl')}`}
+                  {f.type === 'transfer' ? <> → {pointText(f.toPoint)}{f.toDetail && ` · ${f.toDetail}`}</> : ` · ${f.hours} ${t('hoursLbl')}`}
+                  {q.km != null && <> · {t('approxKm')} {q.km} km</>}
                 </dd>
                 <dt>{t('dateLbl')}</dt>
                 <dd>
@@ -432,8 +446,9 @@ export function Booking() {
           <div className="card sum">
             <h3>{t('summary')}</h3>
             <div className="sum-route">
-              <span><MapPin size={15} /> {fromLoc?.name ?? '—'}</span>
-              {f.type === 'transfer' && <span><MapPin size={15} /> {toLoc?.name ?? '—'}</span>}
+              <span><MapPin size={15} /> {f.fromPoint?.label ?? '—'}</span>
+              {f.type === 'transfer' && <span><MapPin size={15} /> {f.toPoint?.label ?? '—'}</span>}
+              {q.km != null && <small className="sum-km">{t('approxKm')} {q.km} km{q.byDistance ? ` · ${t('byDistance')}` : ''}</small>}
             </div>
             <p className="sum-date">
               {dateLabel(f.date, lang)} · {f.time} · {pax} {t('pax')}

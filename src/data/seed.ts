@@ -2,7 +2,7 @@ import type { AppState, Booking, BookingStatus, L10n, RoutePrice } from '../type
 
 const l = (tr: string, en: string, ru: string): L10n => ({ tr, en, ru });
 
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2;
 
 /** Örnek fiyatlar (EUR, tek yön, Vito baz). Gerçek fiyatlar panelden girilir. */
 const AYT_ROUTES: [string, number, number, number][] = [
@@ -86,7 +86,7 @@ function demoBooking(
 }
 
 export function createSeed(): AppState {
-  return {
+  const st: AppState = {
     version: STATE_VERSION,
     settings: {
       companyName: 'Aurea VIP Transfer',
@@ -150,51 +150,55 @@ export function createSeed(): AppState {
       freeWaitMin: 60,
       minLeadHours: 4,
       payments: { cash: true, card_vehicle: true, online: false },
+      roadFactor: 1.3,
+      mapLat: 36.8969,
+      mapLng: 30.7133,
+      searchBbox: '29.2,35.8,32.9,37.7',
       adminPassword: 'admin123',
     },
     vehicles: [
       {
-        id: 'vito', name: 'Mercedes Vito VIP', art: 'van', pax: 6, luggage: 6, hourlyRate: 35, active: true, images: [],
+        id: 'vito', perKm: 1.1, minFare: 35, name: 'Mercedes Vito VIP', art: 'van', pax: 6, luggage: 6, hourlyRate: 35, active: true, images: [],
         category: l('VIP Minivan', 'VIP Minivan', 'VIP минивэн'),
         description: l('Deri koltuklar, geniş iç hacim ve sessiz sürüş. Aileler ve küçük gruplar için en çok tercih edilen araç.', 'Leather seats, generous space and a quiet ride. The favourite choice for families and small groups.', 'Кожаные сиденья, просторный салон и тихий ход. Лучший выбор для семей и небольших групп.'),
         features: l('Deri VIP koltuk\nKlima\nÜcretsiz Wi-Fi\nSoğuk su ikramı\nUSB şarj', 'Leather VIP seats\nAir conditioning\nFree Wi-Fi\nComplimentary water\nUSB charging', 'Кожаные VIP-сиденья\nКондиционер\nБесплатный Wi-Fi\nВода в подарок\nUSB-зарядка'),
       },
       {
-        id: 'vclass', name: 'Mercedes V-Class Luxury', art: 'van', pax: 6, luggage: 5, hourlyRate: 50, active: true, images: [],
+        id: 'vclass', perKm: 1.5, minFare: 50, name: 'Mercedes V-Class Luxury', art: 'van', pax: 6, luggage: 5, hourlyRate: 50, active: true, images: [],
         category: l('Lüks Minivan', 'Luxury Minivan', 'Люкс минивэн'),
         description: l('Karşılıklı kaptan koltuklar, ambiyans aydınlatma ve üst düzey konfor. İş seyahatleri ve özel günler için.', 'Captain seats facing each other, ambient lighting and first-class comfort for business and special occasions.', 'Капитанские кресла друг напротив друга, атмосферная подсветка и комфорт первого класса.'),
         features: l('Kaptan koltuklar\nAmbiyans aydınlatma\nÜcretsiz Wi-Fi\nİkram\nKarartmalı camlar', 'Captain seats\nAmbient lighting\nFree Wi-Fi\nRefreshments\nPrivacy glass', 'Капитанские кресла\nАтмосферная подсветка\nБесплатный Wi-Fi\nНапитки\nТонированные стёкла'),
       },
       {
-        id: 'sedan', name: 'Mercedes E-Class', art: 'sedan', pax: 3, luggage: 3, hourlyRate: 40, active: true, images: [],
+        id: 'sedan', perKm: 1.2, minFare: 40, name: 'Mercedes E-Class', art: 'sedan', pax: 3, luggage: 3, hourlyRate: 40, active: true, images: [],
         category: l('Business Sedan', 'Business Sedan', 'Бизнес-седан'),
         description: l('Tek başına veya çift seyahat eden misafirler için zarif ve dinamik iş sınıfı sedan.', 'An elegant business-class sedan for solo travellers and couples.', 'Элегантный седан бизнес-класса для одного или двух пассажиров.'),
         features: l('Deri koltuk\nKlima\nÜcretsiz Wi-Fi\nSoğuk su ikramı', 'Leather seats\nAir conditioning\nFree Wi-Fi\nComplimentary water', 'Кожаные сиденья\nКондиционер\nБесплатный Wi-Fi\nВода в подарок'),
       },
       {
-        id: 'sprinter', name: 'Mercedes Sprinter VIP', art: 'sprinter', pax: 13, luggage: 13, hourlyRate: 60, active: true, images: [],
+        id: 'sprinter', perKm: 1.9, minFare: 60, name: 'Mercedes Sprinter VIP', art: 'sprinter', pax: 13, luggage: 13, hourlyRate: 60, active: true, images: [],
         category: l('VIP Minibüs', 'VIP Minibus', 'VIP микроавтобус'),
         description: l('Kalabalık aileler, golf grupları ve kurumsal ekipler için ferah, ayakta durulabilen VIP minibüs.', 'A spacious, stand-up VIP minibus for large families, golf groups and corporate teams.', 'Просторный VIP-микроавтобус для больших семей, гольф-групп и корпоративных команд.'),
         features: l('Geniş bagaj alanı\nKlima\nÜcretsiz Wi-Fi\nTV & müzik sistemi\nGolf çantası uygun', 'Large luggage space\nAir conditioning\nFree Wi-Fi\nTV & sound system\nGolf-bag friendly', 'Большой багажник\nКондиционер\nБесплатный Wi-Fi\nТВ и аудиосистема\nМесто для гольф-сумок'),
       },
     ],
     locations: [
-      { id: 'ayt', name: 'Antalya Havalimanı', kind: 'airport', code: 'AYT' },
-      { id: 'gzp', name: 'Gazipaşa-Alanya Havalimanı', kind: 'airport', code: 'GZP' },
-      { id: 'lara', name: 'Lara / Kundu', kind: 'region' },
-      { id: 'merkez', name: 'Antalya Merkez', kind: 'region' },
-      { id: 'konyaalti', name: 'Konyaaltı', kind: 'region' },
-      { id: 'belek', name: 'Belek', kind: 'region' },
-      { id: 'kadriye', name: 'Kadriye', kind: 'region' },
-      { id: 'side', name: 'Side', kind: 'region' },
-      { id: 'manavgat', name: 'Manavgat', kind: 'region' },
-      { id: 'okurcalar', name: 'Okurcalar / Avsallar', kind: 'region' },
-      { id: 'alanya', name: 'Alanya', kind: 'region' },
-      { id: 'mahmutlar', name: 'Mahmutlar', kind: 'region' },
-      { id: 'beldibi', name: 'Beldibi', kind: 'region' },
-      { id: 'kemer', name: 'Kemer', kind: 'region' },
-      { id: 'tekirova', name: 'Tekirova', kind: 'region' },
-      { id: 'kas', name: 'Kaş', kind: 'region' },
+      { id: 'ayt', name: 'Antalya Havalimanı', kind: 'airport', code: 'AYT', lat: 36.8987, lng: 30.8005, radiusKm: 3 },
+      { id: 'gzp', name: 'Gazipaşa-Alanya Havalimanı', kind: 'airport', code: 'GZP', lat: 36.2993, lng: 32.3006, radiusKm: 3 },
+      { id: 'lara', name: 'Lara / Kundu', kind: 'region', lat: 36.856, lng: 30.855, radiusKm: 7 },
+      { id: 'merkez', name: 'Antalya Merkez', kind: 'region', lat: 36.8969, lng: 30.7133, radiusKm: 6 },
+      { id: 'konyaalti', name: 'Konyaaltı', kind: 'region', lat: 36.864, lng: 30.63, radiusKm: 6 },
+      { id: 'belek', name: 'Belek', kind: 'region', lat: 36.86, lng: 31.055, radiusKm: 7 },
+      { id: 'kadriye', name: 'Kadriye', kind: 'region', lat: 36.888, lng: 30.985, radiusKm: 4 },
+      { id: 'side', name: 'Side', kind: 'region', lat: 36.767, lng: 31.389, radiusKm: 5 },
+      { id: 'manavgat', name: 'Manavgat', kind: 'region', lat: 36.787, lng: 31.443, radiusKm: 5 },
+      { id: 'okurcalar', name: 'Okurcalar / Avsallar', kind: 'region', lat: 36.64, lng: 31.73, radiusKm: 9 },
+      { id: 'alanya', name: 'Alanya', kind: 'region', lat: 36.544, lng: 32.0, radiusKm: 7 },
+      { id: 'mahmutlar', name: 'Mahmutlar', kind: 'region', lat: 36.49, lng: 32.09, radiusKm: 5 },
+      { id: 'beldibi', name: 'Beldibi', kind: 'region', lat: 36.715, lng: 30.565, radiusKm: 5 },
+      { id: 'kemer', name: 'Kemer', kind: 'region', lat: 36.6, lng: 30.56, radiusKm: 6 },
+      { id: 'tekirova', name: 'Tekirova', kind: 'region', lat: 36.505, lng: 30.53, radiusKm: 6 },
+      { id: 'kas', name: 'Kaş', kind: 'region', lat: 36.2, lng: 29.64, radiusKm: 10 },
     ],
     routes: [
       ...AYT_ROUTES.map((r, i) => mkRoute('ayt', r, i < 8)),
@@ -220,4 +224,11 @@ export function createSeed(): AppState {
       demoBooking(6, { fromId: 'gzp', toId: 'mahmutlar', fromDetail: 'Gazipaşa', toDetail: 'Mahmutlar Sahil', date: today(1), time: '13:05', flightNo: 'SU 6249', vehicleId: 'vclass', price: 45, status: 'new', lang: 'ru' }, 'Ирина Волкова'),
     ],
   };
+  // Demo rezervasyonlarına konum noktası ekle
+  const pt = (id: string | undefined, detail: string) => {
+    const l = st.locations.find((x) => x.id === id);
+    return l && l.lat != null && l.lng != null ? { label: detail || l.name, sub: l.name, lat: l.lat, lng: l.lng, zoneId: l.id, kind: 'place' as const } : undefined;
+  };
+  st.bookings = st.bookings.map((b) => ({ ...b, fromPoint: pt(b.fromId, b.fromDetail), toPoint: pt(b.toId, b.toDetail) }));
+  return st;
 }
