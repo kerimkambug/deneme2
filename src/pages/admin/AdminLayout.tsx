@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { NavLink, Outlet, Link } from 'react-router-dom';
-import { LayoutDashboard, CalendarClock, ListChecks, Car, Tags, UserRound, PanelsTopLeft, Settings, LogOut, ExternalLink, Menu, X, Lock, Loader2, WifiOff, Contact } from 'lucide-react';
+import { LayoutDashboard, CalendarClock, ListChecks, Car, Tags, UserRound, PanelsTopLeft, Settings, LogOut, ExternalLink, Menu, X, Lock, Loader2, WifiOff, Contact, Wallet, BarChart3 } from 'lucide-react';
 import { REMOTE, adminLogin, hasToken, logout as storeLogout, useScope, useStatus, useStore } from '../../data/store';
 import { toast } from './ui';
+import { beep } from '../../lib/push';
 import { Brand } from '../../components/Brand';
 
 const KEY = 'vip:admin';
@@ -77,6 +78,8 @@ const NAV = [
   { to: '/panel/fiyatlar', icon: Tags, label: 'Bölgeler & Fiyatlar' },
   { to: '/panel/soforler', icon: UserRound, label: 'Şoförler' },
   { to: '/panel/musteriler', icon: Contact, label: 'Müşteriler' },
+  { to: '/panel/kasa', icon: Wallet, label: 'Kasa' },
+  { to: '/panel/raporlar', icon: BarChart3, label: 'Raporlar' },
   { to: '/panel/icerik', icon: PanelsTopLeft, label: 'Site İçeriği' },
   { to: '/panel/ayarlar', icon: Settings, label: 'Ayarlar' },
 ];
@@ -93,8 +96,18 @@ export function AdminLayout() {
   }, [status, ok]);
   useEffect(() => {
     const on = (e: Event) => toast((e as CustomEvent<string>).detail || 'Kaydedilemedi');
+    const nb = (e: Event) => {
+      const b = (e as CustomEvent<{ status: string; customer: { name: string }; code: string }>).detail;
+      if (b?.status !== 'new') return;
+      beep();
+      toast(`Yeni rezervasyon: ${b.customer.name} · ${b.code}`);
+    };
     window.addEventListener('vip:error', on);
-    return () => window.removeEventListener('vip:error', on);
+    window.addEventListener('vip:new-booking', nb);
+    return () => {
+      window.removeEventListener('vip:error', on);
+      window.removeEventListener('vip:new-booking', nb);
+    };
   }, []);
   if (!ok) return <Login onLogin={login} />;
   if (!loadedOnce) {

@@ -26,7 +26,7 @@ function detectLang(): Lang {
   return LANGS.includes(nav) ? nav : 'en';
 }
 
-const DEFAULT_CURRENCY: Record<Lang, Currency> = { tr: 'TRY', en: 'EUR', ru: 'EUR' };
+const DEFAULT_CURRENCY: Record<Lang, Currency> = { tr: 'TRY', en: 'EUR', ru: 'EUR', de: 'EUR', pl: 'EUR' };
 
 export function PrefsProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => read('vip:lang', LANGS, detectLang()));
@@ -67,6 +67,7 @@ export function usePrefs() {
 export function useT() {
   const { lang } = usePrefs();
   const t = useCallback((k: StrKey) => STRINGS[k][lang], [lang]);
-  const tl = useCallback((v: L10n | undefined) => (v ? v[lang] || v.tr || v.en || '' : ''), [lang]);
+  // Çevirisi girilmemiş metinde: Türkçe ziyaretçiye Türkçe, diğerlerine İngilizce göster
+  const tl = useCallback((v: L10n | undefined) => (v ? v[lang] || (lang === 'tr' ? v.tr : v.en) || v.tr || v.en || '' : ''), [lang]);
   return { t, tl, lang };
 }

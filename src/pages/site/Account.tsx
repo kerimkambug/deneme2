@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, Car, CheckCircle2, Loader2, LogOut, MapPin, Plane, Plus, Radio, UserRound } from 'lucide-react';
+import { ArrowRight, Car, CheckCircle2, Loader2, LogOut, MapPin, Plane, Plus, Radio, Star, UserRound } from 'lucide-react';
 import {
   claimBooking, customerLogin, customerLogout, customerRegister, isCustomerLoggedIn, REMOTE, updateProfile, useAccount, useScope, useStatus, useStore,
 } from '../../data/store';
@@ -135,8 +135,8 @@ function TripCard({ b }: { b: Booking }) {
           {d && ` · ${d.name} (${d.plate})`}
         </small>
       </div>
-      <Link to={`/takip/${b.code}`} className={`btn btn-sm ${live ? 'btn-gold' : 'btn-outline-dark'}`}>
-        {live ? <><Radio size={15} /> {t('accLive')}</> : <>{t('accDetails')} <ArrowRight size={15} /></>}
+      <Link to={`/takip/${b.code}`} className={`btn btn-sm ${live || (b.status === 'completed' && !b.review) ? 'btn-gold' : 'btn-outline-dark'}`}>
+        {live ? <><Radio size={15} /> {t('accLive')}</> : b.status === 'completed' && !b.review ? <><Star size={15} /> {t('rateCta')}</> : <>{t('accDetails')} <ArrowRight size={15} /></>}
       </Link>
     </article>
   );

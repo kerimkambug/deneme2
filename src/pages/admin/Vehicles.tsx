@@ -1,3 +1,4 @@
+import { Fleet, expiringDocs } from './Fleet';
 import { ask, notify } from '../../components/dialog';
 import { useState } from 'react';
 import { ArrowDown, ArrowUp, Luggage, Pencil, Plus, Trash2, Users } from 'lucide-react';
@@ -9,7 +10,7 @@ import { Field, GalleryInput, L10nInput, Modal, PageHead, Toggle, toast } from '
 const ART: Record<VehicleArt, string> = { sedan: 'Sedan', van: 'Minivan', sprinter: 'Minibüs', bus: 'Midibüs / Otobüs' };
 const empty = (): Vehicle => ({
   id: uid('v_'), name: '', art: 'van', pax: 6, luggage: 6, hourlyRate: 0, perKm: 0, minFare: 0, active: true, images: [],
-  category: { tr: '', en: '', ru: '' }, description: { tr: '', en: '', ru: '' }, features: { tr: '', en: '', ru: '' },
+  category: { tr: '', en: '', ru: '', de: '', pl: '' }, description: { tr: '', en: '', ru: '', de: '', pl: '' }, features: { tr: '', en: '', ru: '', de: '', pl: '' },
 });
 
 function Editor({ initial, onClose }: { initial: Vehicle; onClose: () => void }) {
@@ -56,6 +57,9 @@ function Editor({ initial, onClose }: { initial: Vehicle; onClose: () => void })
 }
 
 export function Vehicles() {
+  const [tab, setTab] = useState<'types' | 'fleet'>('types');
+  const fleet = useStore((s) => s.fleet);
+  const warn = expiringDocs(fleet).length;
   const vehicles = useStore((s) => s.vehicles);
   const bookings = useStore((s) => s.bookings);
   const [edit, setEdit] = useState<Vehicle | null>(null);
@@ -70,8 +74,13 @@ export function Vehicles() {
   };
   return (
     <>
-      <PageHead title="Araçlar" desc="Araç tipleri, kapasiteler, görseller ve özellikler. Sıralama sitede de aynen görünür." actions={<button className="abtn abtn-primary" onClick={() => setEdit(empty())}><Plus size={16} /> Araç ekle</button>} />
-      <div className="vgrid">
+      <PageHead title="Araçlar" desc="Sitede gösterilen araç tipleri ve filodaki plakaların evrak takibi." actions={tab === 'types' ? <button className="abtn abtn-primary" onClick={() => setEdit(empty())}><Plus size={16} /> Araç tipi ekle</button> : undefined} />
+      <div className="tabs tabs-lg">
+        <button className={tab === 'types' ? 'on' : ''} onClick={() => setTab('types')}>Araç tipleri (sitede)</button>
+        <button className={tab === 'fleet' ? 'on' : ''} onClick={() => setTab('fleet')}>Plakalar & evraklar {warn > 0 && <em className="nav-count">{warn}</em>}</button>
+      </div>
+      {tab === 'fleet' && <Fleet />}
+      <div className="vgrid" hidden={tab !== 'types'}>
         {vehicles.map((v, i) => (
           <article key={v.id} className={`vitem ${v.active ? '' : 'off'}`}>
             <VehicleMedia v={v} />

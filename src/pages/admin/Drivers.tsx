@@ -52,6 +52,8 @@ export function Drivers() {
           const cash = done.reduce((a, b) => a + (b.cashCollected ?? 0), 0);
           const today = mine.filter((b) => b.date === todayIso() && !['cancelled', 'no_show'].includes(b.status)).length;
           const v = s.vehicles.find((x) => x.id === d.vehicleId);
+          const rated = mine.filter((b) => b.review);
+          const avg = rated.length ? (rated.reduce((a, b) => a + b.review!.rating, 0) / rated.length).toFixed(1) : null;
           return (
             <article key={d.id} className={`ditem ${d.active ? '' : 'off'}`}>
               <div className="ditem-h">
@@ -60,6 +62,7 @@ export function Drivers() {
                   <h3>{d.name}</h3>
                   <small>{d.plate} · {v?.name ?? 'Araç yok'}</small>
                 </div>
+                {avg && <em className="pill" title={`${rated.length} değerlendirme`}>★ {avg}</em>}
                 {!d.active && <em className="pill">Pasif</em>}
               </div>
               <div className="ditem-stats">

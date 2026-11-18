@@ -5,7 +5,7 @@ import { AccountError, addBooking, bookingCode, customerRegister, isCustomerLogg
 import { usePrefs, useT } from '../../lib/prefs';
 import { dateLabel, hoursUntil, money, todayIso } from '../../lib/format';
 import { fmt } from '../../lib/i18n';
-import { quote } from '../../lib/pricing';
+import { findPromo, quote } from '../../lib/pricing';
 import { VehicleMedia } from '../../components/VehicleMedia';
 import { LocationField, withZone } from '../../components/LocationField';
 import { decodePoint, haversineKm, locationPoint, pointText } from '../../lib/geo';
@@ -92,9 +92,12 @@ export function Booking() {
   const toLoc = loc(toId);
   const geoArgs = { fromId, toId, fromPoint: f.fromPoint, toPoint: f.type === 'transfer' ? f.toPoint : null };
   const vehicle = vehicles.find((v) => v.id === f.vehicleId);
+  const [promoInput, setPromoInput] = useState(qp.get('kod') ?? '');
+  const [promo, setPromo] = useState(qp.get('kod') ?? '');
+  const promoState = promo ? (findPromo(st, promo) ? 'ok' : 'bad') : '';
   const q = useMemo(
-    () => quote(st, { ...geoArgs, type: f.type, vehicleId: f.vehicleId, roundTrip: f.roundTrip, time: f.time, returnTime: f.returnTime, hours: f.hours, extras: f.extras }),
-    [st, f],
+    () => quote(st, { ...geoArgs, type: f.type, vehicleId: f.vehicleId, roundTrip: f.roundTrip, time: f.time, returnTime: f.returnTime, hours: f.hours, extras: f.extras, date: f.date, returnDate: f.returnDate, promo }),
+    [st, f, promo],
   );
   const m = (v: number) => money(v, currency, s.rates, lang);
   const airportPickup = f.fromPoint?.kind === 'airport' || fromLoc?.kind === 'airport';
@@ -186,6 +189,7 @@ export function Booking() {
       nameSign: f.nameSign.trim() || f.name.trim(),
       notes: f.notes.trim(),
       price: q.total,
+      promoCode: q.promoCode || undefined,
       displayCurrency: currency,
       lang,
       payment: f.payment,
@@ -294,7 +298,7 @@ export function Booking() {
           {step === 2 && (
             <section className="bk-vehicles" key="s2">
               {vehicles.map((v) => {
-                const vq = quote(st, { ...geoArgs, type: f.type, vehicleId: v.id, roundTrip: f.roundTrip, time: f.time, returnTime: f.returnTime, hours: f.hours, extras: {} });
+                const vq = quote(st, { ...geoArgs, type: f.type, vehicleId: v.id, roundTrip: f.roundTrip, time: f.time, returnTime: f.returnTime, hours: f.hours, extras: {}, date: f.date, returnDate: f.returnDate, promo });
                 const small = v.pax < pax || v.luggage < f.luggage;
                 const sel = v.id === f.vehicleId;
                 return (
@@ -395,6 +399,18 @@ export function Booking() {
                 </>
               )}
 
+              <div className="promo">
+                <label className="fld">
+                  <span>{t('promo')}</span>
+                  <div className="inline-field">
+                    <input value={promoInput} onChange={(e) => setPromoInput(e.target.value.toUpperCase())} placeholder="KOD" autoCapitalize="characters" />
+                    <button type="button" className="btn btn-outline-dark btn-sm" onClick={() => setPromo(promoInput.trim())}>{t('promoApply')}</button>
+                  </div>
+                </label>
+                {promoState === 'ok' && <p className="ok-msg">{t('promoOk')} −%{findPromo(st, promo)?.percent}</p>}
+                {promoState === 'bad' && <p className="err">{t('promoBad')}</p>}
+              </div>
+
               <label className="fld">
                 <span>{t('notes')}</span>
                 <textarea rows={3} value={f.notes} onChange={(e) => set('notes', e.target.value)} />
@@ -442,7 +458,7 @@ export function Booking() {
 
               <label className="chk">
                 <input type="checkbox" checked={f.consent} onChange={(e) => set('consent', e.target.checked)} />
-                <span>{t('consent')} *</span>
+                <span>{t('consent')} * <Link to="/gizlilik" target="_blank">{t('consentRead')}</Link></span>
               </label>
             </section>
           )}
@@ -532,7 +548,9 @@ export function Booking() {
                 {q.ret > 0 && (<><dt>{t('returnPrice')}</dt><dd>{m(q.ret)}</dd></>)}
                 {q.discount > 0 && (<><dt>{t('discount')}</dt><dd>-{m(q.discount)}</dd></>)}
                 {q.night > 0 && (<><dt>{t('nightFee')}</dt><dd>{m(q.night)}</dd></>)}
+                {q.season !== 0 && (<><dt>{lang === 'tr' && q.seasonName ? q.seasonName : t('seasonFee')}</dt><dd>{q.season > 0 ? '' : '-'}{m(Math.abs(q.season))}</dd></>)}
                 {q.extras > 0 && (<><dt>{t('extras')}</dt><dd>{m(q.extras)}</dd></>)}
+                {q.promo > 0 && (<><dt>{t('promo')} ({q.promoCode})</dt><dd>-{m(q.promo)}</dd></>)}
               </dl>
             )}
             <div className="sum-total">

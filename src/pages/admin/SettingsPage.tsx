@@ -59,6 +59,10 @@ export function SettingsPage() {
           </div>
         </Field>
 
+        <Field label="Google yorum bağlantısı" wide hint="Google İşletme Profili → “Yorum iste” bağlantısı. 4-5 yıldız veren müşteriler buraya yönlendirilir.">
+          <input value={s.googleReviewUrl} onChange={(e) => set('googleReviewUrl', e.target.value.trim())} placeholder="https://g.page/r/..." />
+        </Field>
+
         <h4 className="wide">Güvenlik</h4>
         <Field label="Yeni panel şifresi">
           <div className="inline">

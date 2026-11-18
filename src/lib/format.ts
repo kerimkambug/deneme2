@@ -1,6 +1,6 @@
 import type { Currency, Lang } from '../types';
 
-const LOCALE: Record<Lang, string> = { tr: 'tr-TR', en: 'en-GB', ru: 'ru-RU' };
+const LOCALE: Record<Lang, string> = { tr: 'tr-TR', en: 'en-GB', ru: 'ru-RU', de: 'de-DE', pl: 'pl-PL' };
 
 export function money(eur: number, cur: Currency, rates: Record<Currency, number>, lang: Lang) {
   const v = eur * (rates[cur] || 1);
@@ -35,6 +35,8 @@ export const waLink = (num: string, text?: string) =>
   `https://wa.me/${num.replace(/\D/g, '')}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
 
 export const telLink = (num: string) => `tel:${num.replace(/[^+\d]/g, '')}`;
+
+export const flightLink = (no: string) => `https://www.flightradar24.com/data/flights/${no.replace(/\s/g, '').toLowerCase()}`;
 
 export const mapsLink = (q: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 

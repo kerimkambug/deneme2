@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { patchBooking, setBookingStatus, update, useStore } from '../../data/store';
 import { STATUS_LABEL } from '../../lib/i18n';
 import { mapLink, pointText } from '../../lib/geo';
-import { appUrl, dateLabel, eur, money, telLink, waLink } from '../../lib/format';
+import { appUrl, dateLabel, eur, flightLink, money, telLink, waLink } from '../../lib/format';
 import type { AppState, Booking, BookingStatus } from '../../types';
 import { Modal, StatusBadge, toast } from './ui';
 
@@ -50,7 +50,7 @@ function customerMessage(s: AppState, b: Booking) {
     en: [`Hello ${b.customer.name},`, `Your ${s.settings.companyName} booking is confirmed ✅`, `Ref: ${b.code}`, `Route: ${route}`, `Date: ${b.date} ${b.time}`, `Vehicle: ${v?.name ?? ''}`, price && `Price: ${price}`, d && `Driver: ${d.name} · ${d.phone} · ${d.plate}`, `Track: ${track}`, 'Have a pleasant journey!'],
     ru: [`Здравствуйте, ${b.customer.name}!`, `Ваше бронирование в ${s.settings.companyName} подтверждено ✅`, `Код: ${b.code}`, `Маршрут: ${route}`, `Дата: ${b.date} ${b.time}`, `Автомобиль: ${v?.name ?? ''}`, price && `Стоимость: ${price}`, d && `Водитель: ${d.name} · ${d.phone} · ${d.plate}`, `Отслеживание: ${track}`, 'Приятной поездки!'],
   };
-  return T[b.lang].filter(Boolean).join('\n');
+  return (T[b.lang as keyof typeof T] ?? T.en).filter(Boolean).join('\n');
 }
 
 function driverMessage(s: AppState, b: Booking) {
@@ -141,8 +141,9 @@ export function BookingDetail({ id, onClose }: { id: string; onClose: () => void
               ) : (<><dt>Süre</dt><dd>{b.hours} saat</dd></>)}
               {(b.fromId || b.toId) && (<><dt>Bölge</dt><dd>{locName(s, b.fromId) || 'Bölge dışı'} → {b.type === 'transfer' ? locName(s, b.toId) || 'Bölge dışı' : '—'}{b.distanceKm ? ` · ~${b.distanceKm} km` : ''}</dd></>)}
               {b.roundTrip && (<><dt>Dönüş</dt><dd>{dateLabel(b.returnDate!, 'tr')} · {b.returnTime}{b.returnFlightNo && ` · ✈ ${b.returnFlightNo}`}</dd></>)}
-              {b.flightNo && (<><dt>Uçuş</dt><dd>✈ {b.flightNo}</dd></>)}
+              {b.flightNo && (<><dt>Uçuş</dt><dd>✈ {b.flightNo} <a className="maplink" href={flightLink(b.flightNo)} target="_blank" rel="noopener noreferrer">Uçuş durumu</a></dd></>)}
               <dt>Araç</dt><dd>{v?.name ?? '—'}</dd>
+              {b.promoCode && (<><dt>İndirim kodu</dt><dd><span className="pill">{b.promoCode}</span></dd></>)}
               <dt>Kişi / bavul</dt><dd>{b.adults} yetişkin{b.children ? `, ${b.children} çocuk` : ''} · {b.luggage} bavul</dd>
               {Object.keys(b.extras).length > 0 && (
                 <><dt>Ekstralar</dt><dd>{Object.entries(b.extras).map(([k, n]) => `${s.extras.find((e) => e.id === k)?.name.tr ?? k} ×${n}`).join(', ')}</dd></>
@@ -201,6 +202,13 @@ export function BookingDetail({ id, onClose }: { id: string; onClose: () => void
         {driver && (
           <div className="row-gap">
             <a className="abtn abtn-wa" href={waLink(driver.phone, driverMessage(s, b))} target="_blank" rel="noopener noreferrer"><Send size={16} /> İşi şoföre WhatsApp’tan gönder</a>
+          </div>
+        )}
+
+        {b.review && (
+          <div className="rv-box">
+            <b>{'★'.repeat(b.review.rating)}{'☆'.repeat(5 - b.review.rating)}</b> <span className="muted">Müşteri değerlendirmesi · {new Date(b.review.at).toLocaleDateString('tr-TR')}</span>
+            {b.review.text && <p>“{b.review.text}”</p>}
           </div>
         )}
 

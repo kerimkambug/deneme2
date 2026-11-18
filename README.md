@@ -19,6 +19,18 @@ Demo (tarayıcı) sürümü girişleri: panel şifresi `admin123`, şoför PIN'i
 - **Google Haritalar:** Panel → Ayarlar → *Google Maps API anahtarı* girildiğinde arama (Places API New), adres çözme (Geocoding), harita seçici ve canlı takip haritası Google'a geçer; anahtar boşsa veya reddedilirse otomatik olarak OpenStreetMap'e döner. Render'da `GOOGLE_MAPS_KEY` ortam değişkeniyle de verilebilir.
   Google Cloud'da açılması gerekenler: **Maps JavaScript API, Places API (New), Geocoding API**. Anahtarı *Websites* kısıtıyla yalnızca sitenizin adresine sınırlayın.
 
+## Bu sürümdeki ek modüller
+- **Bildirimler:** Panel özetinde ve şoför ekranında “Bildirimleri aç”. Yeni rezervasyon, müşteri gelmedi (patrona) ve iş atandı/geri alındı/iptal (şoföre) anında telefona gelir. iPhone'da önce Safari → Paylaş → Ana Ekrana Ekle gerekir.
+- **Yasal metinler:** `/gizlilik` sayfası (Panel → Site İçeriği → Yasal metinler), çerez bildirimi, rezervasyon onay kutusunda bağlantı.
+- **Değerlendirme:** transfer bitince müşteri takip sayfasından puan verir; 4-5 yıldızda Google yorum bağlantısı (Ayarlar). Panel → Site İçeriği → Yorumlar'dan tek tıkla sitede yayınlanır.
+- **Sezon & kampanya:** Panel → Bölgeler & Fiyatlar → Sezon & kampanya (her yıl tekrarlayan % fark, indirim kodları; `/rezervasyon?kod=KOD` bağlantısı).
+- **Araç evrakları:** Panel → Araçlar → Plakalar & evraklar (muayene/sigorta/kasko; 30 gün kala uyarı).
+- **Kasa:** şoför ekranından masraf (₺), Panel → Kasa'da tahsilat − masraf − teslim = bakiye.
+- **Raporlar:** ciro ve dağılımlar, sefer listesi ve tüm rezervasyonlar CSV.
+- **Diller:** TR, EN, RU, DE, PL.
+
+Henüz eklenemeyenler ve nedenleri: **[TODO.md](TODO.md)**.
+
 ## Panelden özelleştirilebilenler
 - **Araçlar:** ad, kategori, yolcu & bavul kapasitesi, saatlik ücret, açıklama, özellikler, görsel galerisi, sıralama, gizle/göster
 - **Fiyatlar:** havalimanı/bölge listesi, güzergâh × araç fiyat tablosu, toplu % zam/indirim, popüler güzergâhlar, km/süre

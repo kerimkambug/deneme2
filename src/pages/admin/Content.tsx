@@ -6,7 +6,7 @@ import { SERVICE_ICONS } from '../../components/icons';
 import type { Settings } from '../../types';
 import { Field, ImageInput, L10nInput, PageHead, Toggle } from './ui';
 
-const blank = () => ({ tr: '', en: '', ru: '' });
+const blank = () => ({ tr: '', en: '', ru: '', de: '', pl: '' });
 
 function useSettings() {
   const s = useStore((x) => x.settings);
@@ -36,17 +36,69 @@ function ListEditor<T extends { id: string }>({ items, onChange, render, make, a
   );
 }
 
+function ReceivedReviews() {
+  const st = useStore((x) => x);
+  const got = st.bookings.filter((b) => b.review).sort((a, b) => b.review!.at.localeCompare(a.review!.at));
+  const avg = got.length ? got.reduce((a, b) => a + b.review!.rating, 0) / got.length : 0;
+  const publish = (id: string) =>
+    update((s) => {
+      const b = s.bookings.find((x) => x.id === id);
+      if (!b?.review) return;
+      const parts = b.customer.name.trim().split(/\s+/);
+      s.settings.testimonials.unshift({
+        id: uid('t'),
+        name: parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : parts[0],
+        country: b.lang.toUpperCase(),
+        rating: b.review.rating,
+        text: b.review.text,
+      });
+      b.review.published = true;
+    });
+  return (
+    <div className="apanel">
+      <div className="apanel-h">
+        <h3>Gelen değerlendirmeler</h3>
+        {got.length > 0 && <span className="pill">Ortalama {avg.toFixed(1)} ★ · {got.length} yorum</span>}
+      </div>
+      {got.length === 0 && <p className="empty">Henüz değerlendirme yok. Transfer tamamlanınca müşteri takip sayfasından puan verebilir.</p>}
+      <ul className="rv-list">
+        {got.map((b) => (
+          <li key={b.id}>
+            <div>
+              <b>{'★'.repeat(b.review!.rating)}{'☆'.repeat(5 - b.review!.rating)}</b> <span className="muted">{b.customer.name} · {b.code} · {st.drivers.find((d) => d.id === b.driverId)?.name ?? '—'}</span>
+              {b.review!.text ? <p>“{b.review!.text}”</p> : <p className="muted">(yorum yazılmadı)</p>}
+            </div>
+            {b.review!.published ? (
+              <span className="pill">Sitede</span>
+            ) : (
+              <button className="abtn abtn-sm" disabled={!b.review!.text} onClick={() => publish(b.id)}>Sitede yayınla</button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function Content() {
   const { s, set } = useSettings();
-  const [tab, setTab] = useState<'hero' | 'about' | 'services' | 'reviews' | 'faq'>('hero');
+  const [tab, setTab] = useState<'hero' | 'about' | 'services' | 'reviews' | 'faq' | 'legal'>('hero');
   return (
     <>
       <PageHead title="Site İçeriği" desc="Değişiklikler anında sitede görünür. Her metni Türkçe, İngilizce ve Rusça girebilirsiniz (boş dil Türkçeye düşer)." />
       <div className="tabs tabs-lg">
-        {([['hero', 'Giriş bölümü'], ['about', 'Hakkımızda & rakamlar'], ['services', 'Hizmetler'], ['reviews', 'Yorumlar'], ['faq', 'SSS']] as const).map(([k, l]) => (
+        {([['hero', 'Giriş bölümü'], ['about', 'Hakkımızda & rakamlar'], ['services', 'Hizmetler'], ['reviews', 'Yorumlar'], ['faq', 'SSS'], ['legal', 'Yasal metinler']] as const).map(([k, l]) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
+
+      {tab === 'legal' && (
+        <div className="apanel aform">
+          <p className="awarn wide">Bu metin bir taslaktır. Yayına almadan önce bir avukata veya KVKK danışmanına kontrol ettirin. {'{UNVAN}'}, {'{ADRES}'}, {'{EPOSTA}'} alanları Ayarlar’daki bilgilerle otomatik doldurulur.</p>
+          <Field label="Firma unvanı (resmi)" hint="ör. Aurea Turizm Taşımacılık Ltd. Şti."><input value={s.legalName} onChange={(e) => set('legalName', e.target.value)} /></Field>
+          <L10nInput label="KVKK aydınlatma metni / gizlilik politikası (## ile başlayan satırlar başlık olur)" value={s.privacyText} onChange={(v) => set('privacyText', v)} multiline rows={18} />
+        </div>
+      )}
 
       {tab === 'hero' && (
         <div className="apanel aform">
@@ -105,7 +157,9 @@ export function Content() {
 
       {tab === 'reviews' && (
         <>
-          <p className="awarn">Başlangıçtaki yorumlar örnektir. Yayına almadan önce gerçek müşteri yorumlarıyla (ör. Google / TripAdvisor) değiştirin.</p>
+          <ReceivedReviews />
+          <h3 className="sub">Sitede gösterilen yorumlar</h3>
+          <p className="awarn">Başlangıçtaki yorumlar örnektir. Yayına almadan önce silin; gelen gerçek değerlendirmeleri yukarıdan tek tıkla yayınlayabilirsiniz.</p>
           <ListEditor
             items={s.testimonials}
             onChange={(v) => set('testimonials', v)}

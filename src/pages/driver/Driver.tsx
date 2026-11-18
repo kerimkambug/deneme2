@@ -3,8 +3,11 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Baby, ChevronRight, Luggage, LogOut, MapPinned, MessageCircle, Phone, Plane, Signature, Users, X, Wallet, UserX, Loader2, Radio } from 'lucide-react';
 import { REMOTE, driverList, driverLogin, hasToken, logout, sendLocation, setBookingStatus, useScope, useStatus, useStore } from '../../data/store';
 import { STATUS_LABEL } from '../../lib/i18n';
-import { dateLabel, eur, mapsLink, telLink, todayIso, waLink } from '../../lib/format';
+import { dateLabel, eur, flightLink, mapsLink, telLink, todayIso, waLink } from '../../lib/format';
 import { Brand } from '../../components/Brand';
+import { PushBar } from '../../components/PushBar';
+import { DriverExpenses } from './expenses';
+import { beep } from '../../lib/push';
 import { directionsLink, pointText } from '../../lib/geo';
 import type { Booking, BookingStatus } from '../../types';
 
@@ -187,7 +190,7 @@ function Job({ b, onSign }: { b: Booking; onSign: () => void }) {
       {(open || active) && (
         <div className="djob-b">
           <dl className="adl">
-            {b.flightNo && (<><dt>Uçuş</dt><dd><Plane size={14} /> <b>{b.flightNo}</b></dd></>)}
+            {b.flightNo && (<><dt>Uçuş</dt><dd><Plane size={14} /> <b>{b.flightNo}</b> <a className="maplink" href={flightLink(b.flightNo)} target="_blank" rel="noopener noreferrer">Durum</a></dd></>)}
             <dt>Alış</dt><dd>{pointText(b.fromPoint) || loc(b.fromId)}{b.fromDetail && ` · ${b.fromDetail}`}</dd>
             {b.type === 'transfer' && (<><dt>Varış</dt><dd>{pointText(b.toPoint) || loc(b.toId)}{b.toDetail && ` · ${b.toDetail}`}{b.distanceKm ? ` · ~${b.distanceKm} km` : ''}</dd></>)}
             <dt>Araç</dt><dd>{v?.name}</dd>
@@ -238,6 +241,11 @@ export function Driver() {
   useEffect(() => {
     if (REMOTE && status === 'error' && !hasToken('driver')) setId(null);
   }, [status]);
+  useEffect(() => {
+    const nj = () => beep();
+    window.addEventListener('vip:new-job', nj);
+    return () => window.removeEventListener('vip:new-job', nj);
+  }, []);
   const toggleShare = (v: boolean) => {
     setShare(v);
     try { localStorage.setItem(SHARE_KEY, v ? '1' : '0'); } catch { /* yok say */ }
@@ -315,6 +323,7 @@ export function Driver() {
           <span className="toggle-ui" />
         </label>
       </div>
+      <PushBar role="driver" />
       {share && shareState === 'on' && <p className="drv-keep">Paylaşım sürerken bu ekranı açık tutun.</p>}
       <div className="drv-tabs">
         {([['today', 'Bugün'], ['tomorrow', 'Yarın'], ['later', 'Sonraki']] as const).map(([k, l]) => (
@@ -333,6 +342,7 @@ export function Driver() {
           </div>
         ))}
       </div>
+      <DriverExpenses driverId={me.id} />
       {sign && <NameSign b={sign} onClose={() => setSign(null)} />}
     </div>
   );

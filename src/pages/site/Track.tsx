@@ -8,6 +8,7 @@ import { dateLabel, money, telLink, waLink } from '../../lib/format';
 import type { BookingStatus } from '../../types';
 import { haversineKm, mapLink, pointText } from '../../lib/geo';
 import { LiveMap } from '../../components/LiveMap';
+import { ReviewCard } from '../../components/ReviewCard';
 
 const FLOW: BookingStatus[] = ['new', 'confirmed', 'assigned', 'on_way', 'arrived', 'onboard', 'completed'];
 
@@ -159,6 +160,8 @@ export function Track() {
             })}
           </ol>
         )}
+
+        {b.status === 'completed' && <ReviewCard b={b} />}
 
         {liveLoc && d && (
           <div className="card live-card">

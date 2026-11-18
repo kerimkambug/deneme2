@@ -4,7 +4,7 @@ import { LANGS, type BookingStatus, type L10n } from '../../types';
 import { STATUS_LABEL } from '../../lib/i18n';
 import { compressImage } from '../../lib/image';
 
-export const LANG_FLAG: Record<string, string> = { tr: 'TR', en: 'EN', ru: 'RU' };
+export const LANG_FLAG: Record<string, string> = { tr: 'TR', en: 'EN', ru: 'RU', de: 'DE', pl: 'PL' };
 
 export function StatusBadge({ s }: { s: BookingStatus }) {
   return <span className={`badge st-${s}`}>{STATUS_LABEL[s].tr}</span>;

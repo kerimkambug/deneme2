@@ -1,4 +1,4 @@
-export const LANGS = ['tr', 'en', 'ru'] as const;
+export const LANGS = ['tr', 'en', 'ru', 'de', 'pl'] as const;
 export type Lang = (typeof LANGS)[number];
 export type L10n = Record<Lang, string>;
 
@@ -136,6 +136,10 @@ export interface Booking {
   customer: { name: string; phone: string; email: string };
   /** Hesaplı müşterinin kimliği */
   customerId?: string;
+  /** Kullanılan indirim kodu */
+  promoCode?: string;
+  /** Yolculuk sonrası müşteri değerlendirmesi */
+  review?: { rating: number; text: string; at: string; published?: boolean };
   nameSign: string;
   notes: string;
   /** EUR toplam; 0 = fiyat teklifi bekleniyor */
@@ -179,6 +183,65 @@ export interface Stat {
   label: L10n;
 }
 
+/** Her yıl tekrarlayan sezon fiyat farkı (AA-GG) */
+export interface Season {
+  id: string;
+  name: string;
+  from: string;
+  to: string;
+  /** + zam / - indirim yüzdesi */
+  percent: number;
+  active: boolean;
+}
+
+export interface PromoCode {
+  id: string;
+  code: string;
+  percent: number;
+  /** YYYY-AA-GG, boşsa süresiz */
+  validUntil: string;
+  /** 0 = sınırsız */
+  maxUses: number;
+  note: string;
+  active: boolean;
+}
+
+/** Filodaki gerçek araç (plaka bazlı evrak takibi) */
+export interface FleetUnit {
+  id: string;
+  plate: string;
+  model: string;
+  vehicleId?: string;
+  year: string;
+  /** YYYY-AA-GG */
+  inspection: string;
+  insurance: string;
+  casco: string;
+  notes: string;
+}
+
+export type ExpenseType = 'fuel' | 'parking' | 'toll' | 'wash' | 'other';
+
+/** Şoför masrafı (TL) */
+export interface Expense {
+  id: string;
+  driverId: string;
+  date: string;
+  type: ExpenseType;
+  amount: number;
+  note: string;
+  at: string;
+}
+
+/** Şoförden kasa teslim kaydı (EUR) */
+export interface Settlement {
+  id: string;
+  driverId: string;
+  amount: number;
+  note: string;
+  at: string;
+}
+
 export interface Settings {
   companyName: string;
   shortName: string;
@@ -218,6 +281,14 @@ export interface Settings {
   searchBbox: string;
   /** Google Maps tarayıcı anahtarı (boşsa OpenStreetMap kullanılır) */
   googleMapsKey: string;
+  /** KVKK aydınlatma metni ve gizlilik politikası (## ile başlayan satırlar başlık olur) */
+  privacyText: L10n;
+  /** Google işletme yorum bağlantısı (4-5 yıldız verenler yönlendirilir) */
+  googleReviewUrl: string;
+  seasons: Season[];
+  promoCodes: PromoCode[];
+  /** Firma unvanı (yasal metinlerde) */
+  legalName: string;
   adminPassword: string;
 }
 
@@ -243,6 +314,11 @@ export interface AppState {
   bookings: Booking[];
   /** driverId -> anlık konum */
   live: Record<string, LiveLoc>;
+  /** Şoför masrafları ve kasa teslimleri */
+  expenses: Expense[];
+  settlements: Settlement[];
+  /** Plaka bazlı araçlar (yalnızca panel) */
+  fleet: FleetUnit[];
   /** Panelde müşteri listesi; müşteri oturumunda yalnızca kendisi */
   customers: Customer[];
 }

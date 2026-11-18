@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import type { AppState, Booking, BookingStatus, Customer, Driver, LiveLoc } from '../types';
+import type { AppState, Booking, BookingStatus, Customer, Driver, Expense, LiveLoc } from '../types';
 import { createSeed, STATE_VERSION } from './seed';
 import { registerKeyGetter } from '../lib/gmaps';
 
@@ -12,7 +12,7 @@ import { registerKeyGetter } from '../lib/gmaps';
 export const REMOTE = import.meta.env.VITE_REMOTE === '1';
 const API = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
 const KEY = 'vip-transfer:state:v1';
-const CONFIG_KEYS = ['settings', 'vehicles', 'locations', 'routes', 'extras', 'drivers'] as const;
+const CONFIG_KEYS = ['settings', 'vehicles', 'locations', 'routes', 'extras', 'drivers', 'fleet'] as const;
 
 type Scope = { kind: 'public' } | { kind: 'admin' } | { kind: 'driver' } | { kind: 'customer' } | { kind: 'track'; code: string };
 export type Status = 'ready' | 'loading' | 'error';
@@ -25,7 +25,7 @@ function loadLocal(): AppState {
       const parsed = JSON.parse(raw) as AppState;
       if (parsed.version === STATE_VERSION) {
         const seed = createSeed();
-        return { ...seed, ...parsed, live: parsed.live ?? {}, customers: parsed.customers ?? [], settings: { ...seed.settings, ...parsed.settings } };
+        return { ...seed, ...parsed, live: parsed.live ?? {}, customers: parsed.customers ?? [], fleet: parsed.fleet ?? [], expenses: parsed.expenses ?? [], settlements: parsed.settlements ?? [], settings: { ...seed.settings, ...parsed.settings } };
       }
     }
   } catch {
@@ -37,7 +37,7 @@ function loadLocal(): AppState {
 function initialRemote(): AppState {
   const seed = createSeed();
   const injected = (window as unknown as { __CONFIG__?: Partial<AppState> }).__CONFIG__;
-  return { ...seed, ...(injected ?? {}), settings: { ...seed.settings, ...(injected?.settings ?? {}) }, bookings: [], live: {}, customers: [], drivers: injected?.drivers ?? [] };
+  return { ...seed, ...(injected ?? {}), settings: { ...seed.settings, ...(injected?.settings ?? {}) }, bookings: [], live: {}, customers: [], expenses: [], settlements: [], drivers: injected?.drivers ?? [] };
 }
 
 let state: AppState = REMOTE ? initialRemote() : loadLocal();
@@ -285,7 +285,11 @@ function connectWs(s: Scope) {
       const i = state.bookings.findIndex((b) => b.id === m.data.id);
       const list = [...state.bookings];
       if (i >= 0) list[i] = m.data;
-      else list.unshift(m.data);
+      else {
+        list.unshift(m.data);
+        // Panel/şoför ekranı açıkken sesli uyarı için
+        window.dispatchEvent(new CustomEvent(s.kind === 'driver' ? 'vip:new-job' : 'vip:new-booking', { detail: m.data }));
+      }
       state = { ...state, bookings: list };
     } else if (m.t === 'booking-del') state = { ...state, bookings: state.bookings.filter((b) => b.id !== m.id) };
     else if (m.t === 'live') {
@@ -296,6 +300,7 @@ function connectWs(s: Scope) {
     } else if (m.t === 'track') applyTrack(m.data);
     else if (m.t === 'cview') upsertView(m.data);
     else if (m.t === 'customers') state = { ...state, customers: m.data };
+    else if (m.t === 'ledger') state = { ...state, expenses: m.data.expenses, settlements: m.data.settlements };
     emit();
   };
   sock.onclose = () => {
@@ -402,6 +407,11 @@ export async function driverLogin(driverId: string, pin: string): Promise<string
   }
 }
 
+/** Oturumlu POST (bildirim aboneliği vb.) */
+export function authedPost(r: 'admin' | 'driver', url: string, body: unknown) {
+  return api('POST', url, body, getToken(r));
+}
+
 export function hasToken(r: 'admin' | 'driver') {
   return !!getToken(r);
 }
@@ -418,6 +428,46 @@ export async function driverList(): Promise<{ id: string; name: string }[]> {
   } catch {
     return [];
   }
+}
+
+/** Tamamlanan yolculuğu değerlendir (rezervasyon kodu yeterli) */
+export async function submitReview(code: string, rating: number, text: string) {
+  if (REMOTE) {
+    applyTrack(await api('POST', `/api/track/${encodeURIComponent(code)}/review`, { rating, text }));
+    emit();
+    return;
+  }
+  const b = state.bookings.find((x) => x.code === code);
+  if (b) patchBooking(b.id, { review: { rating, text, at: new Date().toISOString() } });
+}
+
+/* ---------------- masraf & kasa ---------------- */
+export async function addExpense(e: Omit<Expense, 'id' | 'at'>) {
+  if (REMOTE) return void (await api('POST', '/api/driver/expenses', e, getToken('driver')));
+  update((s) => {
+    s.expenses.unshift({ ...e, id: uid('e_'), at: new Date().toISOString() });
+  });
+}
+
+export async function deleteExpense(id: string, as: 'admin' | 'driver') {
+  if (REMOTE) return void (await api('DELETE', `/api/${as}/expenses/${id}`, undefined, getToken(as)));
+  update((s) => {
+    s.expenses = s.expenses.filter((x) => x.id !== id);
+  });
+}
+
+export async function addSettlement(driverId: string, amount: number, note: string) {
+  if (REMOTE) return void (await api('POST', '/api/admin/settlements', { driverId, amount, note }, getToken('admin')));
+  update((s) => {
+    s.settlements.unshift({ id: uid('s_'), driverId, amount, note, at: new Date().toISOString() });
+  });
+}
+
+export async function deleteSettlement(id: string) {
+  if (REMOTE) return void (await api('DELETE', `/api/admin/settlements/${id}`, undefined, getToken('admin')));
+  update((s) => {
+    s.settlements = s.settlements.filter((x) => x.id !== id);
+  });
 }
 
 /* ---------------- müşteri işlemleri ---------------- */

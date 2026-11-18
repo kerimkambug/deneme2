@@ -1,10 +1,13 @@
+import { expiringDocs } from './Fleet';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, CalendarCheck, Inbox, TrendingUp, Wallet, ArrowRight, Plane } from 'lucide-react';
-import { useStore } from '../../data/store';
+import { authedPost, useStore } from '../../data/store';
 import { dateLabel, eur, todayIso } from '../../lib/format';
 import { BookingDetail, routeText } from './BookingDetail';
 import { LiveMap } from '../../components/LiveMap';
+import { PushBar } from '../../components/PushBar';
+import { toast } from './ui';
 import { PageHead, StatusBadge } from './ui';
 
 export function Dashboard() {
@@ -23,6 +26,7 @@ export function Dashboard() {
   const liveMarkers = Object.entries(s.live)
     .filter(([, l]) => Date.now() - Date.parse(l.at) < 3 * 60e3)
     .map(([id, l]) => ({ id, kind: 'car' as const, lat: l.lat, lng: l.lng, heading: l.heading, label: s.drivers.find((d) => d.id === id)?.name.split(' ')[0] }));
+  const docs = expiringDocs(s.fleet);
   const kpis = [
     { icon: CalendarCheck, label: 'Bugünkü transfer', value: todays.length },
     { icon: Inbox, label: 'Onay bekleyen', value: newOnes.length, warn: newOnes.length > 0 },
@@ -33,6 +37,7 @@ export function Dashboard() {
   return (
     <>
       <PageHead title="Günaydın 👋" desc={`${dateLabel(today, 'tr', { weekday: 'long', day: 'numeric', month: 'long' })} · işler tek ekranda`} actions={<Link className="abtn abtn-primary" to="/rezervasyon" target="_blank">+ Telefon rezervasyonu</Link>} />
+      <PushBar role="admin" onTest={() => authedPost('admin', '/api/admin/push/test', {}).then(() => toast('Test bildirimi gönderildi'))} />
       <div className="kpis">
         {kpis.map((k) => (
           <div key={k.label} className={`kpi ${k.warn ? 'kpi-warn' : ''}`}>
@@ -43,6 +48,13 @@ export function Dashboard() {
         ))}
       </div>
 
+      {docs.length > 0 && (
+        <div className="awarn big">
+          <AlertTriangle size={18} />
+          <span><b>Evrak uyarısı:</b> {docs.slice(0, 3).map((d) => `${d.plate} ${d.doc} ${d.days < 0 ? `(${-d.days} gün geçti)` : `(${d.days} gün)`}`).join(' · ')}{docs.length > 3 ? ` +${docs.length - 3}` : ''}</span>
+          <Link to="/panel/araclar" className="abtn abtn-sm">Araçlar <ArrowRight size={14} /></Link>
+        </div>
+      )}
       {unassigned.length > 0 && (
         <div className="awarn big">
           <AlertTriangle size={18} />

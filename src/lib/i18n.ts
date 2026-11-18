@@ -2,7 +2,9 @@ import type { BookingStatus, Lang } from '../types';
 
 type Dict = Record<string, Record<Lang, string>>;
 
-const d = (tr: string, en: string, ru: string) => ({ tr, en, ru });
+import { EXTRA, EXTRA_STATUS } from './i18n-extra';
+
+const d = (tr: string, en: string, ru: string): Record<Lang, string> => ({ tr, en, ru, de: '', pl: '' });
 
 export const STRINGS = {
   // nav
@@ -203,6 +205,21 @@ export const STRINGS = {
   accAddToAccount: d('Hesabıma ekle', 'Add to my account', 'Добавить в аккаунт'),
   accInAccount: d('Hesabınızda kayıtlı', 'Saved in your account', 'Сохранено в аккаунте'),
   accWelcome: d('Hesabınız oluşturuldu. Yolculuklarınızı “Hesabım” sayfasından takip edebilirsiniz.', 'Your account is ready. Follow your journeys from “My Account”.', 'Аккаунт создан. Следите за поездками в разделе «Мой аккаунт».'),
+  cookieText: d('Bu site, hizmetin çalışması için yalnızca zorunlu çerezler ve yerel depolama kullanır.', 'This site only uses cookies and local storage that are necessary for it to work.', 'Сайт использует только необходимые cookie и локальное хранилище.'),
+  cookieOk: d('Tamam', 'OK', 'Понятно'),
+  consentRead: d('Aydınlatma metnini okuyun', 'Read the privacy notice', 'Политика конфиденциальности'),
+  rateTitle: d('Yolculuğunuz nasıldı?', 'How was your journey?', 'Как прошла поездка?'),
+  rateText: d('Şoförümüz ve hizmetimiz hakkında birkaç söz (isteğe bağlı)', 'A few words about your chauffeur and our service (optional)', 'Пара слов о водителе и сервисе (необязательно)'),
+  rateSend: d('Değerlendirmeyi gönder', 'Send review', 'Отправить отзыв'),
+  rateThanks: d('Değerlendirmeniz için teşekkür ederiz!', 'Thank you for your review!', 'Спасибо за отзыв!'),
+  rateGoogle: d('Google’da da paylaşır mısınız? Bize çok yardımcı olur.', 'Would you share it on Google too? It helps us a lot.', 'Поделитесь отзывом в Google? Это нам очень поможет.'),
+  rateGoogleBtn: d('Google’da yorum yap', 'Review on Google', 'Отзыв в Google'),
+  rateCta: d('Değerlendir', 'Rate', 'Оценить'),
+  seasonFee: d('Sezon farkı', 'Seasonal adjustment', 'Сезонная корректировка'),
+  promo: d('İndirim kodu', 'Promo code', 'Промокод'),
+  promoApply: d('Uygula', 'Apply', 'Применить'),
+  promoOk: d('Kod uygulandı', 'Code applied', 'Код применён'),
+  promoBad: d('Kod geçersiz veya süresi dolmuş', 'Invalid or expired code', 'Код недействителен или истёк'),
   copy: d('Kopyala', 'Copy', 'Копировать'),
   copied: d('Kopyalandı', 'Copied', 'Скопировано'),
 } satisfies Dict;
@@ -221,7 +238,19 @@ export const STATUS_LABEL: Record<BookingStatus, Record<Lang, string>> = {
   no_show: d('Müşteri gelmedi', 'No-show', 'Неявка'),
 };
 
-export const LANG_LABEL: Record<Lang, string> = { tr: 'Türkçe', en: 'English', ru: 'Русский' };
+export const LANG_LABEL: Record<Lang, string> = { tr: 'Türkçe', en: 'English', ru: 'Русский', de: 'Deutsch', pl: 'Polski' };
+
+// Almanca ve Lehçe metinleri ekle (eksikse İngilizce kullanılır)
+for (const [k, v] of Object.entries(STRINGS) as [string, Record<Lang, string>][]) {
+  const x = EXTRA[k];
+  v.de = x?.[0] || v.en;
+  v.pl = x?.[1] || v.en;
+}
+for (const [k, v] of Object.entries(STATUS_LABEL)) {
+  const x = EXTRA_STATUS[k];
+  v.de = x?.[0] || v.en;
+  v.pl = x?.[1] || v.en;
+}
 
 export function fmt(s: string, vars: Record<string, string | number>) {
   return s.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ''));

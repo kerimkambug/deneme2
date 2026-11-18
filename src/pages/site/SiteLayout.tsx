@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { Menu, X, UserRound, Phone, MessageCircle, Mail, MapPin, Instagram, ShieldCheck } from 'lucide-react';
 import { Brand } from '../../components/Brand';
+import { CookieBar } from '../../components/CookieBar';
 import { isCustomerLoggedIn, useAccount, useStore } from '../../data/store';
 import { usePrefs, useT } from '../../lib/prefs';
 import { LANG_LABEL } from '../../lib/i18n';
@@ -182,6 +183,9 @@ export function SiteLayout() {
               <li>
                 <Link to="/#sss">{t('navFaq')}</Link>
               </li>
+              <li>
+                <Link to="/gizlilik">{t('privacy')}</Link>
+              </li>
             </ul>
           </div>
         </div>
@@ -193,6 +197,7 @@ export function SiteLayout() {
         </div>
       </footer>
 
+      <CookieBar />
       {s.whatsapp && (
         <a className="fab-wa" href={waLink(s.whatsapp)} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp">
           <MessageCircle size={26} />

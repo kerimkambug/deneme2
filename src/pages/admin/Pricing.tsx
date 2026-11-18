@@ -9,7 +9,7 @@ import { Field, L10nInput, PageHead, Toggle, toast } from './ui';
 
 export function Pricing() {
   const s = useStore((x) => x);
-  const [tab, setTab] = useState<'prices' | 'places' | 'extras' | 'rules'>('prices');
+  const [tab, setTab] = useState<'prices' | 'places' | 'extras' | 'rules' | 'promo'>('prices');
   const [filter, setFilter] = useState('');
   const [nf, setNf] = useState({ from: '', to: '' });
   const [nl, setNl] = useState({ name: '', kind: 'region' as LocationKind, code: '', point: null as Point | null, radius: 5 });
@@ -63,7 +63,7 @@ export function Pricing() {
     <>
       <PageHead title="Bölgeler & Fiyatlar" desc="Fiyatlar araç başı, tek yön ve EUR cinsindendir. Site, müşterinin seçtiği para birimine kendisi çevirir." />
       <div className="tabs tabs-lg">
-        {([['prices', 'Fiyat tablosu'], ['places', 'Havalimanı & bölgeler'], ['extras', 'Ekstralar'], ['rules', 'Kurallar']] as const).map(([k, l]) => (
+        {([['prices', 'Fiyat tablosu'], ['places', 'Havalimanı & bölgeler'], ['extras', 'Ekstralar'], ['promo', 'Sezon & kampanya'], ['rules', 'Kurallar']] as const).map(([k, l]) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -178,7 +178,7 @@ export function Pricing() {
 
       {tab === 'extras' && (
         <>
-          <div className="phead-act"><button className="abtn abtn-primary" onClick={() => update((x) => { x.extras.push({ id: uid('e_'), name: { tr: 'Yeni ekstra', en: 'New extra', ru: 'Новая услуга' }, price: 0, maxQty: 1, active: true }); })}><Plus size={16} /> Ekstra ekle</button></div>
+          <div className="phead-act"><button className="abtn abtn-primary" onClick={() => update((x) => { x.extras.push({ id: uid('e_'), name: { tr: 'Yeni ekstra', en: 'New extra', ru: 'Новая услуга', de: '', pl: '' }, price: 0, maxQty: 1, active: true }); })}><Plus size={16} /> Ekstra ekle</button></div>
           <div className="extras-admin">
             {s.extras.map((e) => (
               <div key={e.id} className="apanel aform">
@@ -189,6 +189,53 @@ export function Pricing() {
                 <Field label=" "><button className="abtn abtn-ghost" onClick={async () => (await ask('Silinsin mi?')) && update((x) => { x.extras = x.extras.filter((y) => y.id !== e.id); })}><Trash2 size={15} /> Sil</button></Field>
               </div>
             ))}
+          </div>
+        </>
+      )}
+
+      {tab === 'promo' && (
+        <>
+          <div className="apanel">
+            <div className="apanel-h"><h3>Sezon fiyatları</h3>
+              <button className="abtn abtn-sm" onClick={() => update((x) => { x.settings.seasons.push({ id: uid('se'), name: 'Yeni sezon', from: '06-01', to: '08-31', percent: 10, active: true }); })}><Plus size={14} /> Sezon ekle</button>
+            </div>
+            <p className="muted small">Her yıl aynı tarihlerde tekrarlar. Yüzde pozitifse zam, negatifse indirim uygulanır (ör. kış için -10). Fiyat tablosu değişmez, fark özet ekranda ayrı satırda görünür.</p>
+            {s.settings.seasons.map((se) => {
+              const setSe = (patch: Record<string, unknown>) => update((x) => { Object.assign(x.settings.seasons.find((y) => y.id === se.id)!, patch); });
+              const toDate = (md: string) => `2000-${md}`;
+              return (
+                <div key={se.id} className="aform season-row">
+                  <Field label="Ad"><input value={se.name} onChange={(e) => setSe({ name: e.target.value })} /></Field>
+                  <Field label="Başlangıç (gün/ay)"><input type="date" value={toDate(se.from)} onChange={(e) => setSe({ from: e.target.value.slice(5) })} /></Field>
+                  <Field label="Bitiş (gün/ay)"><input type="date" value={toDate(se.to)} onChange={(e) => setSe({ to: e.target.value.slice(5) })} /></Field>
+                  <Field label="Fark (%)"><input type="number" value={se.percent} onChange={(e) => setSe({ percent: +e.target.value })} /></Field>
+                  <Field label="Durum"><Toggle checked={se.active} onChange={(v) => setSe({ active: v })} label={se.active ? 'Aktif' : 'Pasif'} /></Field>
+                  <Field label=" "><button className="abtn abtn-ghost" onClick={async () => (await ask('Sezon silinsin mi?', { danger: true, okText: 'Sil' })) && update((x) => { x.settings.seasons = x.settings.seasons.filter((y) => y.id !== se.id); })}><Trash2 size={15} /></button></Field>
+                </div>
+              );
+            })}
+          </div>
+          <div className="apanel">
+            <div className="apanel-h"><h3>İndirim kodları</h3>
+              <button className="abtn abtn-sm" onClick={() => update((x) => { x.settings.promoCodes.push({ id: uid('pc'), code: 'HOSGELDIN10', percent: 10, validUntil: '', maxUses: 0, note: '', active: true }); })}><Plus size={14} /> Kod ekle</button>
+            </div>
+            <p className="muted small">Müşteri rezervasyonda kodu girer; indirim transfer ücretine uygulanır (ekstralara değil). Acente veya otellere özel kod verebilirsiniz. Bağlantı ile paylaşmak için: <code>/rezervasyon?kod=KOD</code></p>
+            {s.settings.promoCodes.length === 0 && <p className="empty">Henüz indirim kodu yok.</p>}
+            {s.settings.promoCodes.map((pc) => {
+              const setPc = (patch: Record<string, unknown>) => update((x) => { Object.assign(x.settings.promoCodes.find((y) => y.id === pc.id)!, patch); });
+              const used = s.bookings.filter((b) => b.promoCode?.toUpperCase() === pc.code.toUpperCase() && b.status !== 'cancelled').length;
+              return (
+                <div key={pc.id} className="aform season-row">
+                  <Field label="Kod"><input value={pc.code} onChange={(e) => setPc({ code: e.target.value.toUpperCase().replace(/\s/g, '') })} /></Field>
+                  <Field label="İndirim (%)"><input type="number" min={1} max={100} value={pc.percent} onChange={(e) => setPc({ percent: +e.target.value })} /></Field>
+                  <Field label="Son tarih" hint="Boş = süresiz"><input type="date" value={pc.validUntil} onChange={(e) => setPc({ validUntil: e.target.value })} /></Field>
+                  <Field label="Kullanım sınırı" hint={`0 = sınırsız · ${used} kez kullanıldı`}><input type="number" min={0} value={pc.maxUses} onChange={(e) => setPc({ maxUses: +e.target.value })} /></Field>
+                  <Field label="Not"><input value={pc.note} onChange={(e) => setPc({ note: e.target.value })} placeholder="ör. X Otel" /></Field>
+                  <Field label="Durum"><Toggle checked={pc.active} onChange={(v) => setPc({ active: v })} label={pc.active ? 'Aktif' : 'Pasif'} /></Field>
+                  <Field label=" "><button className="abtn abtn-ghost" onClick={async () => (await ask('Kod silinsin mi?', { danger: true, okText: 'Sil' })) && update((x) => { x.settings.promoCodes = x.settings.promoCodes.filter((y) => y.id !== pc.id); })}><Trash2 size={15} /></button></Field>
+                </div>
+              );
+            })}
           </div>
         </>
       )}

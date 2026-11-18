@@ -7,8 +7,8 @@ export interface CustomerRec extends Customer {
   passHash: string;
 }
 
-export type Config = Omit<AppState, 'bookings' | 'live' | 'version' | 'customers'>;
-export const CONFIG_KEYS = ['settings', 'vehicles', 'locations', 'routes', 'extras', 'drivers'] as const;
+export type Config = Omit<AppState, 'bookings' | 'live' | 'version' | 'customers' | 'expenses' | 'settlements'>;
+export const CONFIG_KEYS = ['settings', 'vehicles', 'locations', 'routes', 'extras', 'drivers', 'fleet'] as const;
 
 export interface Store {
   init(): Promise<void>;
@@ -17,6 +17,9 @@ export interface Store {
   getAdminHash(): Promise<string | null>;
   /** Tek seferlik veri güncellemelerinin kaydı */
   getMigrations(): Promise<string[]>;
+  /** Genel amaçlı anahtar-değer kaydı */
+  getKv<T>(key: string): Promise<T | null>;
+  setKv(key: string, value: unknown): Promise<void>;
   addMigration(name: string): Promise<void>;
   setAdminHash(h: string): Promise<void>;
   listBookings(): Promise<Booking[]>;
@@ -55,6 +58,8 @@ class PgStore implements Store {
   setConfig(c: Config) { return this.kvSet('config', c); }
   async getAdminHash() { return (await this.kvGet<{ h: string }>('admin'))?.h ?? null; }
   setAdminHash(h: string) { return this.kvSet('admin', { h }); }
+  getKv<T>(key: string) { return this.kvGet<T>(key); }
+  setKv(key: string, value: unknown) { return this.kvSet(key, value); }
   async getMigrations() { return (await this.kvGet<string[]>('migrations')) ?? []; }
   async addMigration(name: string) { await this.kvSet('migrations', [...(await this.getMigrations()), name]); }
   async listBookings() {
@@ -84,7 +89,7 @@ class PgStore implements Store {
 /* ---------------- JSON dosyası (yerel geliştirme) ---------------- */
 class FileStore implements Store {
   file: string;
-  data: { config: Config | null; admin: string | null; bookings: Record<string, Booking>; customers?: Record<string, CustomerRec>; migrations?: string[] } = { config: null, admin: null, bookings: {}, customers: {}, migrations: [] };
+  data: { config: Config | null; admin: string | null; bookings: Record<string, Booking>; customers?: Record<string, CustomerRec>; migrations?: string[]; kv?: Record<string, unknown> } = { config: null, admin: null, bookings: {}, customers: {}, migrations: [] };
   constructor(file: string) { this.file = file; }
   async init() {
     try {
@@ -101,6 +106,8 @@ class FileStore implements Store {
   async setConfig(c: Config) { this.data.config = c; this.save(); }
   async getAdminHash() { return this.data.admin; }
   async setAdminHash(h: string) { this.data.admin = h; this.save(); }
+  async getKv<T>(key: string) { return (this.data.kv?.[key] as T) ?? null; }
+  async setKv(key: string, value: unknown) { (this.data.kv ??= {})[key] = value; this.save(); }
   async getMigrations() { return this.data.migrations ?? []; }
   async addMigration(name: string) { (this.data.migrations ??= []).push(name); this.save(); }
   async listBookings() { return Object.values(this.data.bookings); }

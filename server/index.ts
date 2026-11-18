@@ -6,8 +6,9 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createSeed } from '../src/data/seed';
 import { quote } from '../src/lib/pricing';
 import { haversineKm, resolveZone } from '../src/lib/geo';
-import type { AppState, Booking, BookingStatus, Driver, LiveLoc } from '../src/types';
+import type { AppState, Booking, BookingStatus, Driver, Expense, ExpenseType, LiveLoc, Settlement } from '../src/types';
 import { CONFIG_KEYS, createStore, type Config, type CustomerRec } from './db';
+import { addSub, initPush, notify, removeSub, vapidPublicKey } from './push';
 import { checkPassword, clearFails, hashPassword, noteFail, rateLimited, sign, verify, type TokenData } from './auth';
 
 const PORT = Number(process.env.PORT) || 8080;
@@ -19,15 +20,44 @@ let config: Config;
 const bookings = new Map<string, Booking>();
 const live: Record<string, LiveLoc> = {};
 const customers = new Map<string, CustomerRec>();
+let ledger: { expenses: Expense[]; settlements: Settlement[] } = { expenses: [], settlements: [] };
 const publicCustomer = ({ passHash: _p, ...c }: CustomerRec) => c;
 const ACTIVE: BookingStatus[] = ['on_way', 'arrived', 'onboard'];
 
-const state = (): AppState => ({ version: 3, ...config, bookings: [...bookings.values()], live, customers: [...customers.values()].map(publicCustomer) });
+const state = (): AppState => ({ version: 3, ...config, bookings: [...bookings.values()], live, customers: [...customers.values()].map(publicCustomer), ...ledger });
 
 /** Tek seferlik veri güncellemeleri (her biri yalnızca bir kez çalışır) */
 async function runMigrations() {
   const done = await store.getMigrations();
-  if (!done.includes('2026-11-clear-demo')) {
+  if (!done.includes('2026-11-de-pl')) {
+    // Değiştirilmemiş örnek içeriklere Almanca/Lehçe çevirileri ekle
+    const dict = new Map<string, { de: string; pl: string }>();
+    const collect = (o: unknown) => {
+      if (!o || typeof o !== 'object') return;
+      const x = o as Record<string, unknown>;
+      if (typeof x.en === 'string' && typeof x.tr === 'string' && typeof x.de === 'string' && x.de) dict.set(x.en, { de: x.de, pl: String(x.pl ?? '') });
+      Object.values(x).forEach(collect);
+    };
+    const fill = (o: unknown) => {
+      if (!o || typeof o !== 'object') return;
+      const x = o as Record<string, unknown>;
+      if (typeof x.en === 'string' && typeof x.tr === 'string') {
+        const t = dict.get(x.en);
+        if (t && !x.de) x.de = t.de;
+        if (t && !x.pl) x.pl = t.pl;
+      }
+      Object.values(x).forEach(fill);
+    };
+    collect(createSeed());
+    fill(config);
+    await store.setConfig(config);
+    await store.addMigration('2026-11-de-pl');
+    console.log('[migration] Almanca/Lehçe çeviriler eklendi');
+  }
+  if (!done.includes('2026-11-clear-demo') && process.env.SEED_DEMO === '1') {
+    // Demo kurulumunda örnek veriler kalır
+    await store.addMigration('2026-11-clear-demo');
+  } else if (!done.includes('2026-11-clear-demo')) {
     // Hazır örnek rezervasyonları ve örnek şoförleri kaldır (gerçek kayıtlara dokunmaz)
     const demoDrivers = new Set(['d1', 'd2', 'd3']);
     let nb = 0;
@@ -56,13 +86,15 @@ async function boot() {
   await store.init();
   const saved = await store.getConfig();
   if (saved) {
-    const seed = createSeed();
-    config = { ...seed, ...saved, settings: { ...seed.settings, ...saved.settings } } as Config;
+    const { bookings: _sb, live: _sl, customers: _sc, version: _sv, expenses: _se, settlements: _ss, ...seedCfg } = createSeed();
+    // Yapılandırmaya yalnızca ayar anahtarları girsin (eski kayıtlarda karışmış rezervasyon vb. atılır)
+    const clean = Object.fromEntries(Object.entries(saved).filter(([k]) => (CONFIG_KEYS as readonly string[]).includes(k))) as Partial<Config>;
+    config = { ...seedCfg, ...clean, fleet: clean.fleet ?? [], settings: { ...seedCfg.settings, ...clean.settings } } as Config;
     for (const b of await store.listBookings()) bookings.set(b.id, b);
     for (const c of await store.listCustomers()) customers.set(c.id, c);
   } else {
     const seed = createSeed();
-    const { bookings: demo, live: _l, version: _v, customers: _c, ...rest } = seed;
+    const { bookings: demo, live: _l, version: _v, customers: _c, expenses: _e, settlements: _s, ...rest } = seed;
     config = rest;
     // Örnek şoförler yalnızca demo kurulumunda eklenir; gerçek kurulumda panelden oluşturulur
     if (process.env.SEED_DEMO !== '1') config.drivers = [];
@@ -76,6 +108,8 @@ async function boot() {
     console.log('[boot] başlangıç verileri yüklendi');
   }
   await runMigrations();
+  await initPush(store);
+  ledger = (await store.getKv<typeof ledger>('ledger')) ?? { expenses: [], settlements: [] };
   if (!(await store.getAdminHash())) {
     await store.setAdminHash(hashPassword(process.env.ADMIN_PASSWORD || 'admin123'));
     if (!process.env.ADMIN_PASSWORD) console.warn('[boot] ADMIN_PASSWORD yok, panel şifresi: admin123');
@@ -88,7 +122,7 @@ async function boot() {
 const publicDriver = (d: Driver) => ({ id: d.id, name: d.name, phone: d.phone, plate: d.plate, vehicleId: d.vehicleId, languages: d.languages, active: d.active, pin: '' });
 
 function publicConfig(): Config {
-  return { ...config, settings: { ...config.settings, adminPassword: '' }, drivers: [] };
+  return { ...config, settings: { ...config.settings, adminPassword: '' }, drivers: [], fleet: [] };
 }
 
 function trackView(b: Booking) {
@@ -187,6 +221,13 @@ const validPoint = (p: unknown) => {
   return { ...pt, zoneId: resolveZone(state(), pt)?.id };
 };
 
+/** Bildirim metni için kısa özet */
+function tripLine(b: Booking) {
+  const name = (p?: { label: string }, id?: string) => p?.label || config.locations.find((l) => l.id === id)?.name || '';
+  const route = b.type === 'hourly' ? `${name(b.fromPoint, b.fromId)} · ${b.hours} saat` : `${name(b.fromPoint, b.fromId)} → ${name(b.toPoint, b.toId)}`;
+  return `${b.date.split('-').reverse().slice(0, 2).join('.')} ${b.time} · ${route}`;
+}
+
 /* ======================= Uygulama ======================= */
 const app = express();
 app.disable('x-powered-by');
@@ -221,7 +262,14 @@ app.post('/api/bookings', wrap(async (req, res) => {
   const q = quote(state(), {
     type, fromId: fromPoint.zoneId, toId: toPoint?.zoneId, fromPoint, toPoint, vehicleId: vehicle.id, roundTrip,
     time: b.time, returnTime: b.returnTime, hours: num(b.hours, 1, 24), extras,
+    date: String(b.date), returnDate: roundTrip ? str(b.returnDate, 10) : undefined, promo: str(b.promoCode, 30),
   });
+  if (b.promoCode && !q.promoCode) return res.status(400).json({ error: 'İndirim kodu geçersiz veya süresi dolmuş.' });
+  if (q.promoCode) {
+    const pc = config.settings.promoCodes.find((p) => p.code.toUpperCase() === q.promoCode.toUpperCase());
+    const used = [...bookings.values()].filter((x) => x.promoCode?.toUpperCase() === q.promoCode.toUpperCase() && x.status !== 'cancelled').length;
+    if (pc && pc.maxUses > 0 && used >= pc.maxUses) return res.status(400).json({ error: 'İndirim kodu kullanım sınırına ulaştı.' });
+  }
   let code = str(b.code, 12).toUpperCase();
   if (!/^VT[A-Z0-9]{5}$/.test(code) || [...bookings.values()].some((x) => x.code === code)) {
     code = 'VT' + Math.random().toString(36).slice(2, 7).toUpperCase();
@@ -256,8 +304,9 @@ app.post('/api/bookings', wrap(async (req, res) => {
     nameSign: str(b.nameSign, 80) || name,
     notes: str(b.notes, 1000),
     price: q.total,
+    promoCode: q.promoCode || undefined,
     displayCurrency: (['EUR', 'TRY', 'USD', 'GBP'].includes(String(b.displayCurrency)) ? b.displayCurrency : 'EUR') as Booking['displayCurrency'],
-    lang: (['tr', 'en', 'ru'].includes(String(b.lang)) ? b.lang : 'en') as Booking['lang'],
+    lang: (['tr', 'en', 'ru', 'de', 'pl'].includes(String(b.lang)) ? b.lang : 'en') as Booking['lang'],
     payment: config.settings.payments[b.payment as keyof typeof config.settings.payments] ? (b.payment as Booking['payment']) : 'cash',
     status: 'new',
     history: [{ status: 'new', at: now }],
@@ -265,7 +314,25 @@ app.post('/api/bookings', wrap(async (req, res) => {
   const ct = verify((req.headers.authorization || '').replace(/^Bearer /, ''));
   if (ct?.role === 'customer' && ct.id && customers.has(ct.id)) booking.customerId = ct.id;
   await saveBooking(booking);
+  void notify({ role: 'admin' }, {
+    title: `Yeni rezervasyon · ${booking.code}`,
+    body: `${booking.customer.name} · ${tripLine(booking)}${booking.price ? ` · ${booking.price}€` : ' · fiyat teklifi'}`,
+    url: '/panel/rezervasyonlar',
+    tag: booking.code,
+  });
   res.json(trackView(booking));
+}));
+
+app.post('/api/track/:code/review', wrap(async (req, res) => {
+  const b = [...bookings.values()].find((x) => x.code === String(req.params.code).toUpperCase());
+  if (!b) return res.status(404).json({ error: 'Bulunamadı' });
+  if (b.status !== 'completed') return res.status(400).json({ error: 'Transfer tamamlandıktan sonra değerlendirebilirsiniz.' });
+  if (b.review) return res.status(409).json({ error: 'Bu yolculuk zaten değerlendirildi.' });
+  const rating = Math.round(num(req.body?.rating, 1, 5));
+  const next: Booking = { ...b, review: { rating, text: str(req.body?.text, 1000).trim(), at: new Date().toISOString() } };
+  await saveBooking(next);
+  void notify({ role: 'admin' }, { title: `${'★'.repeat(rating)} Yeni değerlendirme`, body: `${b.customer.name}: ${next.review!.text.slice(0, 120) || '(yorum yok)'}`, url: '/panel/icerik', tag: 'rv-' + b.code });
+  res.json(trackView(next));
 }));
 
 app.get('/api/track/:code', (req, res) => {
@@ -419,6 +486,15 @@ app.patch('/api/admin/bookings/:id', auth('admin'), wrap(async (req, res) => {
   if (!prev) return res.status(404).json({ error: 'Bulunamadı' });
   const next = { ...prev, ...req.body, id: prev.id, code: prev.code, createdAt: prev.createdAt } as Booking;
   await saveBooking(next, prev.driverId !== next.driverId ? prev.driverId : undefined);
+  if (next.driverId && next.driverId !== prev.driverId) {
+    void notify({ role: 'driver', driverId: next.driverId }, { title: 'Yeni iş atandı', body: `${next.customer.name} · ${tripLine(next)}`, url: '/surucu', tag: next.code });
+  }
+  if (prev.driverId && prev.driverId !== next.driverId) {
+    void notify({ role: 'driver', driverId: prev.driverId }, { title: 'İş sizden alındı', body: `${prev.code} · ${tripLine(prev)}`, url: '/surucu', tag: prev.code });
+  }
+  if (next.status === 'cancelled' && prev.status !== 'cancelled' && next.driverId) {
+    void notify({ role: 'driver', driverId: next.driverId }, { title: 'İş iptal edildi', body: `${next.code} · ${tripLine(next)}`, url: '/surucu', tag: next.code });
+  }
   res.json({ ok: true });
 }));
 
@@ -429,6 +505,74 @@ app.delete('/api/admin/bookings/:id', auth('admin'), wrap(async (req, res) => {
     await store.deleteBooking(b.id);
     broadcastBooking(b, undefined, true);
   }
+  res.json({ ok: true });
+}));
+
+// --- Masraf ve kasa
+async function saveLedger(driverId?: string) {
+  await store.setKv('ledger', ledger);
+  for (const c of clients) {
+    if (c.role === 'admin') send(c, { t: 'ledger', data: ledger });
+    else if (c.role === 'driver' && (!driverId || c.driverId === driverId)) {
+      send(c, { t: 'ledger', data: { expenses: ledger.expenses.filter((e) => e.driverId === c.driverId), settlements: ledger.settlements.filter((x) => x.driverId === c.driverId) } });
+    }
+  }
+}
+const EXP_TYPES: ExpenseType[] = ['fuel', 'parking', 'toll', 'wash', 'other'];
+app.post('/api/driver/expenses', auth('driver'), wrap(async (req, res) => {
+  const amount = num(req.body?.amount, 0, 1e6);
+  const type = EXP_TYPES.includes(req.body?.type) ? (req.body.type as ExpenseType) : 'other';
+  if (!amount) return res.status(400).json({ error: 'Tutar girin.' });
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.date)) ? String(req.body.date) : new Date().toISOString().slice(0, 10);
+  ledger.expenses.unshift({ id: 'e_' + Math.random().toString(36).slice(2, 10), driverId: user(req).id!, date, type, amount, note: str(req.body?.note, 200), at: new Date().toISOString() });
+  await saveLedger(user(req).id);
+  res.json({ ok: true });
+}));
+app.delete('/api/driver/expenses/:id', auth('driver'), wrap(async (req, res) => {
+  const e = ledger.expenses.find((x) => x.id === req.params.id && x.driverId === user(req).id);
+  // Şoför yalnızca son 24 saatte girdiği masrafı silebilir
+  if (!e || Date.now() - Date.parse(e.at) > 864e5) return res.status(403).json({ error: 'Bu masraf artık silinemez; ofise bildirin.' });
+  ledger.expenses = ledger.expenses.filter((x) => x.id !== e.id);
+  await saveLedger(e.driverId);
+  res.json({ ok: true });
+}));
+app.delete('/api/admin/expenses/:id', auth('admin'), wrap(async (req, res) => {
+  const e = ledger.expenses.find((x) => x.id === req.params.id);
+  ledger.expenses = ledger.expenses.filter((x) => x.id !== req.params.id);
+  await saveLedger(e?.driverId);
+  res.json({ ok: true });
+}));
+app.post('/api/admin/settlements', auth('admin'), wrap(async (req, res) => {
+  const d = config.drivers.find((x) => x.id === req.body?.driverId);
+  const amount = num(req.body?.amount, 0, 1e7);
+  if (!d || !amount) return res.status(400).json({ error: 'Şoför ve tutar gerekli.' });
+  ledger.settlements.unshift({ id: 's_' + Math.random().toString(36).slice(2, 10), driverId: d.id, amount, note: str(req.body?.note, 200), at: new Date().toISOString() });
+  await saveLedger(d.id);
+  res.json({ ok: true });
+}));
+app.delete('/api/admin/settlements/:id', auth('admin'), wrap(async (req, res) => {
+  const x = ledger.settlements.find((y) => y.id === req.params.id);
+  ledger.settlements = ledger.settlements.filter((y) => y.id !== req.params.id);
+  await saveLedger(x?.driverId);
+  res.json({ ok: true });
+}));
+
+// --- Bildirim abonelikleri
+app.get('/api/push/key', (_req, res) => res.json({ key: vapidPublicKey() }));
+app.post('/api/admin/push', auth('admin'), wrap(async (req, res) => {
+  await addSub(req.body, 'admin');
+  res.json({ ok: true });
+}));
+app.post('/api/driver/push', auth('driver'), wrap(async (req, res) => {
+  await addSub(req.body, 'driver', user(req).id);
+  res.json({ ok: true });
+}));
+app.post('/api/push/unsubscribe', wrap(async (req, res) => {
+  await removeSub(str(req.body?.endpoint, 1000));
+  res.json({ ok: true });
+}));
+app.post('/api/admin/push/test', auth('admin'), wrap(async (_req, res) => {
+  await notify({ role: 'admin' }, { title: 'Test bildirimi', body: 'Bildirimler bu cihazda çalışıyor ✓', url: '/panel' });
   res.json({ ok: true });
 }));
 
@@ -455,6 +599,8 @@ app.get('/api/driver/state', auth('driver'), (req, res) => {
     bookings: [...bookings.values()].filter((b) => b.driverId === me.id),
     live: live[me.id] ? { [me.id]: live[me.id] } : {},
     customers: [],
+    expenses: ledger.expenses.filter((e) => e.driverId === me.id),
+    settlements: ledger.settlements.filter((x) => x.driverId === me.id),
   });
 });
 
@@ -471,6 +617,10 @@ app.patch('/api/driver/bookings/:id', auth('driver'), wrap(async (req, res) => {
   }
   if (req.body?.cashCollected !== undefined) next.cashCollected = num(req.body.cashCollected, 0, 1e5);
   await saveBooking(next);
+  const dName = config.drivers.find((d) => d.id === prev.driverId)?.name ?? 'Şoför';
+  if (status === 'no_show' && prev.status !== 'no_show') {
+    void notify({ role: 'admin' }, { title: `Müşteri gelmedi · ${prev.code}`, body: `${dName} · ${prev.customer.name} · ${tripLine(prev)}`, url: '/panel/rezervasyonlar', tag: prev.code });
+  }
   res.json({ ok: true });
 }));
 
