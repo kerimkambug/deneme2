@@ -14,7 +14,7 @@ const pinIcon = L.divIcon({
   iconAnchor: [17, 42],
 });
 
-/** Haritadan konum seçme penceresi (OpenStreetMap / CARTO altlık) */
+/** Haritadan konum seçme penceresi (OpenStreetMap altlık, API anahtarı gerekmez) */
 export function MapPicker({ initial, onPick, onClose }: { initial: Point | null; onPick: (p: Point) => void; onClose: () => void }) {
   const { t } = useT();
   const el = useRef<HTMLDivElement>(null);
@@ -26,11 +26,25 @@ export function MapPicker({ initial, onPick, onClose }: { initial: Point | null;
     const s = getState().settings;
     const start = initial ?? { lat: s.mapLat, lng: s.mapLng };
     const map = L.map(el.current, { zoomControl: true, attributionControl: true }).setView([start.lat, start.lng], initial ? 15 : 10);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      subdomains: 'abcd',
-      attribution: '&copy; OpenStreetMap &copy; CARTO',
-    }).addTo(map);
+    // Anahtarsız altlıklar: önce OpenStreetMap, hata verirse yedek sağlayıcı
+    const sources = [
+      { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '&copy; OpenStreetMap', subdomains: '' },
+      { url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', attribution: '&copy; OpenStreetMap, HOT', subdomains: 'abc' },
+    ];
+    let idx = 0;
+    let errors = 0;
+    let layer = L.tileLayer(sources[0].url, { maxZoom: 19, attribution: sources[0].attribution }).addTo(map);
+    const onErr = () => {
+      errors += 1;
+      if (errors < 4 || idx >= sources.length - 1) return;
+      idx += 1;
+      errors = 0;
+      map.removeLayer(layer);
+      const src = sources[idx];
+      layer = L.tileLayer(src.url, { maxZoom: 19, attribution: src.attribution, subdomains: src.subdomains || 'abc' }).addTo(map);
+      layer.on('tileerror', onErr);
+    };
+    layer.on('tileerror', onErr);
     const marker = L.marker([start.lat, start.lng], { draggable: true, icon: pinIcon, opacity: initial ? 1 : 0 }).addTo(map);
 
     let seq = 0;

@@ -12,7 +12,7 @@ Havalimanı / otel transferi yapan VIP taşımacılık firmaları için hazırla
 Demo girişleri: panel şifresi `admin123`, şoför PIN'i `1234`.
 
 ## Konum sistemi
-- Müşteri **Nereden / Nereye** için otel, adres veya havalimanı arar (OpenStreetMap / Photon), **“Konumumu kullan”** ile GPS konumunu alır veya **haritada iğneyle** işaretler (Leaflet + CARTO altlık). API anahtarı gerekmez.
+- Müşteri **Nereden / Nereye** için otel, adres veya havalimanı arar (OpenStreetMap / Photon), **“Konumumu kullan”** ile GPS konumunu alır veya **haritada iğneyle** işaretler (Leaflet + OpenStreetMap altlık). API anahtarı gerekmez.
 - Seçilen nokta, panelde tanımlı bölge merkezlerine ve yarıçaplarına göre otomatik bir **bölgeye** eşlenir; o güzergâh fiyat tablosunda varsa **sabit fiyat**, yoksa aracın **km ücreti** (en düşük ücretle) uygulanır.
 - Şoför ekranında “Alışa git / Varışa git” doğrudan koordinata Google Maps yol tarifi açar; şoföre giden WhatsApp mesajında da harita linkleri bulunur.
 - Yoğun kullanımda arama/harita için ücretli bir sağlayıcıya (Google Places, Mapbox, MapTiler) geçilmesi önerilir; değişiklik `src/lib/geo.ts` ve `src/components/MapPicker.tsx` ile sınırlıdır.
