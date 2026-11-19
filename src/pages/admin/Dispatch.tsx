@@ -6,6 +6,7 @@ import { dateLabel, todayIso } from '../../lib/format';
 import { BookingDetail, driverConflicts, routeText } from './BookingDetail';
 import { PageHead, StatusBadge, toast } from './ui';
 import type { Booking } from '../../types';
+import { needsPatron, poolOpen } from '../../lib/pool';
 
 const shift = (iso: string, n: number) => {
   const [y, m, d] = iso.split('-').map(Number);
@@ -49,6 +50,8 @@ export function Dispatch() {
           <StatusBadge s={b.status} />
         </div>
         <span className="job-n">{b.customer.name}</span>
+        {!b.driverId && poolOpen(s.settings, b) && <span className="pool-badge">Havuzda</span>}
+        {!b.driverId && needsPatron(s.settings, b) && <span className="pool-badge late">Havuzda alınmadı</span>}
         <small>{routeText(s, b)}</small>
         <small className="job-m">
           {b.flightNo && <><Plane size={12} /> {b.flightNo}</>}
@@ -72,7 +75,7 @@ export function Dispatch() {
     <>
       <PageHead
         title="Sevk Planı"
-        desc="Günün işlerini şoförlere atayın. Kartları sürükleyip bırakabilir veya listeden seçebilirsiniz."
+        desc={`Günün işlerini şoförlere atayın. Kartları sürükleyip bırakabilir veya listeden seçebilirsiniz.${s.settings.dispatchMode === 'hybrid' ? ' İş havuzu açık: atanmamış işleri şoförler de alabilir, kalanı siz atarsınız.' : s.settings.dispatchMode === 'pool' ? ' İş havuzu açık: atanmamış işleri şoförler alır.' : ''}`}
         actions={
           <div className="daypick">
             <button className="aicon" onClick={() => setDay(shift(day, -1))} aria-label="Önceki gün"><ChevronLeft size={18} /></button>

@@ -10,6 +10,7 @@ import type { AppState, Booking, BookingStatus, Driver, Expense, ExpenseType, Li
 import { CONFIG_KEYS, createStore, type Config, type CustomerRec } from './db';
 import { istanbulDate, istanbulHour, validateBackup, type BackupInfo, type FullBackup } from './backup';
 import { addSub, initPush, notify, removeSub, vapidPublicKey } from './push';
+import { eligible, needsPatron, poolOpen, toPoolItem, type PoolItem } from '../src/lib/pool';
 import { CHAT_MAX, chatOpen, quickText, type Chat, type ChatMsg } from '../src/lib/chat';
 import { checkPassword, clearFails, hashPassword, noteFail, rateLimited, sign, verify, type TokenData } from './auth';
 
@@ -120,6 +121,8 @@ async function boot() {
   }
   config.settings.adminPassword = '';
   if (!config.settings.googleMapsKey && process.env.GOOGLE_MAPS_KEY) config.settings.googleMapsKey = process.env.GOOGLE_MAPS_KEY;
+  poolReady = true;
+  checkPool();
 }
 
 /* ======================= Görünümler (kim neyi görür) ======================= */
@@ -156,6 +159,7 @@ function broadcastConfig() {
       send(c, { t: 'config', data: { ...publicConfig(), drivers: me ? [publicDriver(me)] : [] } });
     } else send(c, { t: 'config', data: publicConfig() });
   }
+  checkPool(true);
 }
 
 function broadcastBooking(b: Booking, prevDriverId?: string, deleted = false) {
@@ -197,6 +201,7 @@ async function saveBooking(b: Booking, prevDriverId?: string) {
     broadcastLive(b.driverId);
   }
   broadcastBooking(b, prevDriverId);
+  checkPool(true);
   const c = chats.get(b.id);
   if (c) {
     const payload = { t: 'chat', bookingId: b.id, code: b.code, open: chatOpen(b.status, b.driverId), chat: c };
@@ -236,6 +241,53 @@ function tripLine(b: Booking) {
   const route = b.type === 'hourly' ? `${name(b.fromPoint, b.fromId)} · ${b.hours} saat` : `${name(b.fromPoint, b.fromId)} → ${name(b.toPoint, b.toId)}`;
   return `${b.date.split('-').reverse().slice(0, 2).join('.')} ${b.time} · ${route}`;
 }
+
+/* ======================= İş havuzu ======================= */
+const placeName = (p?: { label: string; sub?: string }, id?: string) =>
+  (p ? [p.label, p.sub].filter(Boolean).join(', ') : '') || config.locations.find((l) => l.id === id)?.name || '';
+
+function poolFor(driverId?: string): PoolItem[] {
+  const d = config.drivers.find((x) => x.id === driverId);
+  if (!d) return [];
+  return [...bookings.values()]
+    .filter((b) => poolOpen(config.settings, b) && eligible(d, b))
+    .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
+    .map((b) => toPoolItem(config.settings, b, placeName(b.fromPoint, b.fromId), b.type === 'hourly' ? `${b.hours} saat` : placeName(b.toPoint, b.toId)));
+}
+
+let poolReady = false;
+let poolSeen: Set<string> | null = null;
+const poolWarned = new Set<string>();
+
+/** Havuzu şoförlere yayınlar; yeni işte şoförlere, süresi dolan işte patrona bildirim gönderir. */
+function checkPool(force = false) {
+  if (!poolReady) return;
+  const open = new Set([...bookings.values()].filter((b) => poolOpen(config.settings, b)).map((b) => b.id));
+  const late = [...bookings.values()].filter((b) => needsPatron(config.settings, b));
+  if (!poolSeen) {
+    // İlk çalıştırma (sunucu açılışı): geçmişe dönük bildirim gönderme
+    poolSeen = open;
+    for (const b of late) poolWarned.add(b.id);
+    return;
+  }
+  const changed = open.size !== poolSeen.size || [...open].some((id) => !poolSeen!.has(id));
+  for (const id of open) {
+    if (poolSeen.has(id)) continue;
+    const b = bookings.get(id)!;
+    for (const d of config.drivers) {
+      if (eligible(d, b)) void notify({ role: 'driver', driverId: d.id }, { title: '🟢 Havuzda yeni iş', body: `${tripLine(b)} · ${b.price}€`, url: '/surucu', tag: 'pool-' + b.code });
+    }
+  }
+  for (const b of late) {
+    if (poolWarned.has(b.id)) continue;
+    poolWarned.add(b.id);
+    void notify({ role: 'admin' }, { title: `Havuzda alınmadı · ${b.code}`, body: `Şoför atayın: ${tripLine(b)}`, url: '/panel/sevk', tag: 'late-' + b.code });
+  }
+  poolSeen = open;
+  if (!changed && !force) return;
+  for (const c of clients) if (c.role === 'driver') send(c, { t: 'pool', data: poolFor(c.driverId) });
+}
+setInterval(() => checkPool(), 60e3);
 
 /* ======================= Uygulama ======================= */
 const app = express();
@@ -858,8 +910,21 @@ app.get('/api/driver/state', auth('driver'), (req, res) => {
     customers: [],
     expenses: ledger.expenses.filter((e) => e.driverId === me.id),
     settlements: ledger.settlements.filter((x) => x.driverId === me.id),
+    pool: poolFor(me.id),
   });
 });
+
+/** Şoför havuzdan iş alır (ilk basan alır) */
+app.post('/api/driver/pool/:id/claim', auth('driver'), wrap(async (req, res) => {
+  const me = config.drivers.find((d) => d.id === user(req).id && d.active);
+  const b = bookings.get(req.params.id);
+  if (!me) return res.status(401).json({ error: 'Şoför bulunamadı' });
+  if (!b || !poolOpen(config.settings, b) || !eligible(me, b)) return res.status(409).json({ error: 'Bu iş artık havuzda değil. Başka bir şoför almış olabilir.' });
+  const next: Booking = { ...b, driverId: me.id, status: 'assigned', history: [...b.history, { status: 'assigned', at: new Date().toISOString(), by: `${me.name} (havuzdan)` }] };
+  await saveBooking(next);
+  void notify({ role: 'admin' }, { title: `İş havuzdan alındı · ${b.code}`, body: `${me.name} · ${tripLine(b)}`, url: '/panel/sevk', tag: 'claim-' + b.code });
+  res.json({ ok: true });
+}));
 
 app.patch('/api/driver/bookings/:id', auth('driver'), wrap(async (req, res) => {
   const prev = bookings.get(req.params.id);

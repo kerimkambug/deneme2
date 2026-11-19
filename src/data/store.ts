@@ -3,6 +3,7 @@ import type { AppState, Booking, BookingStatus, Customer, Driver, Expense, LiveL
 import { createSeed, STATE_VERSION } from './seed';
 import { registerKeyGetter } from '../lib/gmaps';
 import { chatOpen, type Chat, type ChatMsg } from '../lib/chat';
+import { eligible, poolOpen } from '../lib/pool';
 
 /**
  * Veri katmanı. İki modda çalışır:
@@ -303,7 +304,11 @@ function connectWs(s: Scope) {
     else if (m.t === 'cview') upsertView(m.data);
     else if (m.t === 'customers') state = { ...state, customers: m.data };
     else if (m.t === 'chat') setChat(m.bookingId, { open: m.open, chat: m.chat }, true);
-    else if (m.t === 'ledger') state = { ...state, expenses: m.data.expenses, settlements: m.data.settlements };
+    else if (m.t === 'pool') {
+      const had = new Set((state.pool ?? []).map((x) => x.id));
+      if ((m.data as { id: string }[]).some((x) => !had.has(x.id))) window.dispatchEvent(new CustomEvent('vip:pool'));
+      state = { ...state, pool: m.data };
+    } else if (m.t === 'ledger') state = { ...state, expenses: m.data.expenses, settlements: m.data.settlements };
     emit();
   };
   sock.onclose = () => {
@@ -418,6 +423,25 @@ export function authedPost(r: 'admin' | 'driver', url: string, body: unknown) {
 /** Oturumlu GET (yedek listesi vb.) */
 export function authedGet<T>(r: 'admin' | 'driver', url: string) {
   return api<T>('GET', url, undefined, getToken(r));
+}
+
+/** Şoför havuzdan iş alır. Hata mesajı veya null döner. */
+export async function claimPool(driverId: string, bookingId: string): Promise<string | null> {
+  if (REMOTE) {
+    try {
+      await api('POST', `/api/driver/pool/${bookingId}/claim`, {}, getToken('driver'));
+      state = { ...state, pool: (state.pool ?? []).filter((x) => x.id !== bookingId) };
+      emit();
+      return null;
+    } catch (e) {
+      return (e as Error).message;
+    }
+  }
+  const b = state.bookings.find((x) => x.id === bookingId);
+  const d = state.drivers.find((x) => x.id === driverId);
+  if (!b || !d || !poolOpen(state.settings, b) || !eligible(d, b)) return 'Bu iş artık havuzda değil.';
+  setBookingStatus(bookingId, 'assigned', `${d.name} (havuzdan)`, { driverId });
+  return null;
 }
 
 export function hasToken(r: 'admin' | 'driver') {

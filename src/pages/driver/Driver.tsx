@@ -9,6 +9,7 @@ import { PushBar } from '../../components/PushBar';
 import { ChatPanel } from '../../components/ChatPanel';
 import { chatOpen, unreadCount } from '../../lib/chat';
 import { DriverExpenses } from './expenses';
+import { PoolList, usePool } from './pool';
 import { beep } from '../../lib/push';
 import { directionsLink, pointText } from '../../lib/geo';
 import type { Booking, BookingStatus } from '../../types';
@@ -259,13 +260,14 @@ export function Driver() {
   });
   const s = useStore((x) => x);
   const status = useStatus();
-  const [day, setDay] = useState<'today' | 'tomorrow' | 'later'>('today');
+  const [day, setDay] = useState<'today' | 'tomorrow' | 'later' | 'pool'>('today');
   const [sign, setSign] = useState<Booking | null>(null);
   const [share, setShare] = useState(() => {
     try { return localStorage.getItem(SHARE_KEY) === '1'; } catch { return false; }
   });
   useScope(id ? { kind: 'driver' } : null);
   const me = s.drivers.find((d) => d.id === id && d.active);
+  const pool = usePool(me);
   const activeJob = s.bookings.find((b) => b.driverId === id && ['on_way', 'arrived', 'onboard'].includes(b.status));
   const shareState = useLiveShare(id ?? '', activeJob, !!me && share);
   useEffect(() => {
@@ -277,9 +279,11 @@ export function Driver() {
       if ((e as CustomEvent<{ msg: { from: string } }>).detail?.msg?.from === 'customer') beep();
     };
     window.addEventListener('vip:new-job', nj);
+    window.addEventListener('vip:pool', nj);
     window.addEventListener('vip:chat', nc);
     return () => {
       window.removeEventListener('vip:new-job', nj);
+      window.removeEventListener('vip:pool', nj);
       window.removeEventListener('vip:chat', nc);
     };
   }, []);
@@ -319,7 +323,8 @@ export function Driver() {
     tomorrow: mine.filter((b) => b.date === t1),
     later: mine.filter((b) => b.date > t1),
   };
-  const list = lists[day];
+  const poolOn = !!s.settings.dispatchMode && s.settings.dispatchMode !== 'manual';
+  const list = day === 'pool' ? [] : lists[day];
   const cash = lists.today.reduce((a, b) => a + (b.cashCollected ?? 0), 0);
   const left = lists.today.filter((b) => !['completed', 'no_show'].includes(b.status)).length;
 
@@ -368,7 +373,13 @@ export function Driver() {
             {l} <em>{lists[k].length}</em>
           </button>
         ))}
+        {poolOn && (
+          <button className={`${day === 'pool' ? 'on' : ''} ${pool.length ? 'has-pool' : ''}`} onClick={() => setDay('pool')}>
+            Havuz <em>{pool.length}</em>
+          </button>
+        )}
       </div>
+      {day === 'pool' ? <PoolList me={me} items={pool} /> : (<>
       <p className="drv-date">{dateLabel(day === 'tomorrow' ? t1 : t0, 'tr', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
       <div className="drv-list">
         {list.length === 0 && <p className="empty">Bu gün için atanmış iş yok.</p>}
@@ -379,6 +390,7 @@ export function Driver() {
           </div>
         ))}
       </div>
+      </>)}
       <DriverExpenses driverId={me.id} />
       {sign && <NameSign b={sign} onClose={() => setSign(null)} />}
     </div>

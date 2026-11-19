@@ -2150,3 +2150,111 @@ body:has(.drv) {
   color: var(--a-muted, #777);
   font-size: 12.5px;
 }
+
+/* İş havuzu (şoför) */
+.drv-tabs {
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  grid-template-columns: none;
+}
+.drv-tabs .has-pool:not(.on) {
+  color: #1f7a4d;
+}
+.drv-tabs .has-pool em {
+  opacity: 1;
+  background: #1f7a4d;
+  color: #fff;
+  border-radius: 999px;
+  padding: 0 7px;
+}
+.drv-pool-info {
+  margin: 14px 4px 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.pool-job .djob-h {
+  cursor: default;
+}
+.pool-price {
+  font-weight: 800;
+  font-size: 17px;
+  white-space: nowrap;
+}
+.pool-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 16px 12px;
+  font-size: 12.5px;
+}
+.pool-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #f3f1ec;
+}
+.pool-job .drv-big {
+  margin: 0 12px 12px;
+  width: calc(100% - 24px);
+}
+
+/* İş havuzu (panel) */
+.pool-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e6f4ec;
+  color: #1f7a4d;
+}
+.pool-badge.late {
+  background: #fdecea;
+  color: #b3261e;
+}
+.mode-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 10px;
+}
+.mode-card {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1.5px solid var(--a-line);
+  background: var(--a-card);
+  cursor: pointer;
+}
+.mode-card b {
+  font-size: 14.5px;
+}
+.mode-card small {
+  color: #6b675f;
+  line-height: 1.45;
+}
+.mode-card.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.pool-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 12px;
+  font-size: 13.5px;
+}
+.pool-job .djob-main b {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.pool-meta {
+  padding: 0 14px 12px;
+}

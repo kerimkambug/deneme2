@@ -151,6 +151,8 @@ export interface Booking {
   driverId?: string;
   cashCollected?: number;
   adminNote?: string;
+  /** Patron bu işi havuza açmadı (kendisi atayacak) */
+  poolOff?: boolean;
   history: { status: BookingStatus; at: string; by?: string }[];
 }
 
@@ -290,6 +292,12 @@ export interface Settings {
   /** Firma unvanı (yasal metinlerde) */
   legalName: string;
   adminPassword: string;
+  /** İş dağıtımı: manual = patron atar, pool = havuz, hybrid = havuz + kalanı patron atar */
+  dispatchMode: 'manual' | 'pool' | 'hybrid';
+  /** Alış saatine kaç saat kala havuzdan çıkar / patron uyarılır */
+  poolCutoffHours: number;
+  /** Patron onayı beklemeden havuza düşsün */
+  poolSkipConfirm: boolean;
 }
 
 /** Şoförün anlık konumu (yalnızca iş sırasında, izinle) */
@@ -321,4 +329,6 @@ export interface AppState {
   fleet: FleetUnit[];
   /** Panelde müşteri listesi; müşteri oturumunda yalnızca kendisi */
   customers: Customer[];
+  /** Şoför ekranı: havuzdaki işler (yalnızca sunucu modunda gelir) */
+  pool?: import('./lib/pool').PoolItem[];
 }

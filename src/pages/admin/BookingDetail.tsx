@@ -9,6 +9,7 @@ import { appUrl, dateLabel, eur, flightLink, money, telLink, waLink } from '../.
 import type { AppState, Booking, BookingStatus } from '../../types';
 import { Modal, StatusBadge, toast } from './ui';
 import { ChatPanel } from '../../components/ChatPanel';
+import { needsPatron, poolOpen, poolUntil } from '../../lib/pool';
 
 const STATUSES = Object.keys(STATUS_LABEL) as BookingStatus[];
 
@@ -73,6 +74,33 @@ function driverMessage(s: AppState, b: Booking) {
     b.notes && `Not: ${b.notes}`,
     `Ödeme: ${b.payment === 'cash' ? 'Nakit' : b.payment === 'card_vehicle' ? 'Araçta kart' : 'Online ödendi'}${b.price ? ` · ${eur(b.price)}` : ''}`,
   ].filter(Boolean).join('\n');
+}
+
+/** Havuz durumu ve havuzdan çıkar / geri koy */
+function PoolLine({ b }: { b: Booking }) {
+  const st = useStore((x) => x.settings);
+  if (!st.dispatchMode || st.dispatchMode === 'manual' || b.driverId || !['new', 'confirmed'].includes(b.status)) return null;
+  const open = poolOpen(st, b);
+  const late = needsPatron(st, b);
+  const at = new Date(poolUntil(st, b)).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return (
+    <div className="pool-line">
+      {b.poolOff ? (
+        <span className="pool-badge late">Havuza kapalı · siz atayacaksınız</span>
+      ) : open ? (
+        <span className="pool-badge">Havuzda · şoförler görüyor ({at} tarihine kadar)</span>
+      ) : late ? (
+        <span className="pool-badge late">Havuzda alınmadı · şoför atayın</span>
+      ) : !(b.price > 0) ? (
+        <span className="muted">Fiyat girilmeden havuza düşmez.</span>
+      ) : b.status === 'new' && !st.poolSkipConfirm ? (
+        <span className="muted">Onayladığınızda havuza düşer.</span>
+      ) : null}
+      <button className="abtn abtn-sm" onClick={() => { patchBooking(b.id, { poolOff: !b.poolOff }); toast(b.poolOff ? 'Havuza açıldı' : 'Havuzdan çıkarıldı'); }}>
+        {b.poolOff ? 'Havuza aç' : 'Havuzdan çıkar'}
+      </button>
+    </div>
+  );
 }
 
 export function BookingDetail({ id, onClose }: { id: string; onClose: () => void }) {
@@ -194,6 +222,8 @@ export function BookingDetail({ id, onClose }: { id: string; onClose: () => void
             </div>
           </div>
         </section>
+
+        <PoolLine b={b} />
 
         {conflicts.length > 0 && (
           <p className="awarn">

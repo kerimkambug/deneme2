@@ -8,9 +8,11 @@ Havalimanı / otel transferi yapan VIP taşımacılık firmaları için hazırla
 | `/hesap` | Müşteri | Hesap aç / giriş (e-posta veya telefon), yaklaşan & geçmiş yolculuklar, canlı takip, kodla rezervasyon ekleme |
 | `/takip/KOD` | Müşteri | Rezervasyon durumu, şoför adı/plaka/telefon, canlı durum çizelgesi |
 | `/panel` | Patron / ofis | Özet, sevk planı (sürükle-bırak), rezervasyonlar, araçlar, bölgeler & fiyatlar, şoförler, site içeriği, ayarlar |
-| `/surucu` | Şoför | Günün işleri, tek tuşla durum güncelleme, tam ekran isim tabelası, navigasyon, tahsilat |
+| `/surucu` | Şoför | Günün işleri, iş havuzundan iş alma (açıksa), tek tuşla durum güncelleme, tam ekran isim tabelası, navigasyon, tahsilat |
 
 Demo (tarayıcı) sürümü girişleri: panel şifresi `admin123`, şoför PIN'i `1234`. Sunucu kurulumunda panel şifresi `ADMIN_PASSWORD` ile belirlenir; şoförler **Panel → Şoförler** bölümünden eklenir ve giriş bilgileri WhatsApp'tan iletilebilir.
+
+**İş dağıtımı (Panel → Ayarlar):** *Sadece patron atar* · *Havuz + kalanı patron atar* (alış saatine X saat kala alınmamış iş havuzdan çıkar, patrona bildirim gider) · *Tam havuz*. Havuzda şoför müşteri adını/telefonunu görmez; iş alınınca açılır. Araç tipi tanımlı şoför yalnızca o tipteki işleri görür. Aynı işi iki şoför alamaz (ilk basan alır).
 
 ## Konum sistemi
 - Müşteri **Nereden / Nereye** için otel, adres veya havalimanı arar (OpenStreetMap / Photon), **“Konumumu kullan”** ile GPS konumunu alır veya **haritada iğneyle** işaretler (Leaflet + OpenStreetMap altlık). API anahtarı gerekmez.

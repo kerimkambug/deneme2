@@ -4,6 +4,7 @@ import { Download, Upload, RotateCcw } from 'lucide-react';
 import { REMOTE, exportJson, importJson, resetDemo, storageUsageKb, update, useStore } from '../../data/store';
 import type { Settings } from '../../types';
 import { ServerBackups } from './ServerBackups';
+import { DispatchSettings } from './DispatchSettings';
 import { Field, ImageInput, L10nInput, PageHead, toast } from './ui';
 
 export function SettingsPage() {
@@ -72,6 +73,8 @@ export function SettingsPage() {
           </div>
         </Field>
       </div>
+
+      <DispatchSettings />
 
       {REMOTE ? <ServerBackups /> : (
       <div className="apanel">
