@@ -139,11 +139,12 @@ export async function resolvePoint(p: Point): Promise<Point> {
   const pred = gPreds.get(p.placeId);
   const { Place } = (await google.maps.importLibrary('places')) as google.maps.PlacesLibrary;
   const place = pred ? pred.toPlace() : new Place({ id: p.placeId });
-  await place.fetchFields({ fields: ['location', 'displayName', 'formattedAddress'] });
+  // Yalnızca koordinat (Essentials). displayName istemek 'Pro' ücret sınıfına geçirir; ad zaten öneriden geliyor.
+  await place.fetchFields({ fields: ['location', 'formattedAddress'] });
   gToken = null; // oturum seçimle kapanır
   const loc = place.location;
   if (!loc) throw new Error('Konum bulunamadı');
-  return { ...p, lat: loc.lat(), lng: loc.lng(), label: p.label || place.displayName || '', sub: p.sub || place.formattedAddress || undefined };
+  return { ...p, lat: loc.lat(), lng: loc.lng(), label: p.label || place.formattedAddress?.split(',')[0] || '', sub: p.sub || place.formattedAddress || undefined };
 }
 
 async function reverseGoogle(lat: number, lng: number, lang: string): Promise<Point | null> {
