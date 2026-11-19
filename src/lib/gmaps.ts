@@ -3,6 +3,8 @@
 let promise: Promise<typeof google.maps> | null = null;
 let loadedKey = '';
 let authFailed = false;
+/** Kota dolması vb. geçici hatalarda Google bu zamana kadar kullanılmaz */
+let downUntil = 0;
 
 let keyGetter: () => string = () => '';
 /** Veri katmanı anahtarı buradan sağlar (sunucu kodu bu modülü güvenle içe aktarabilsin diye) */
@@ -11,7 +13,15 @@ export function registerKeyGetter(fn: () => string) {
 }
 
 export function gmapsKey(): string {
-  return authFailed ? '' : (keyGetter() || '').trim();
+  return authFailed || Date.now() < downUntil ? '' : (keyGetter() || '').trim();
+}
+
+/** Google hata verdi (ör. günlük kota doldu): bir süre ücretsiz servise geç */
+export function markGoogleDown(ms = 30 * 60e3) {
+  if (Date.now() < downUntil) return;
+  downUntil = Date.now() + ms;
+  console.warn('[maps] Google yanıt vermedi; geçici olarak OpenStreetMap kullanılacak');
+  window.dispatchEvent(new CustomEvent('vip:maps-fallback'));
 }
 
 export function usingGoogle() {

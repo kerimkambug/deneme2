@@ -35,6 +35,7 @@ export function LocationField({ value, onChange, label, variant = 'light', class
   const [online, setOnline] = useState<boolean | null>(null);
   const [map, setMap] = useState(false);
   const [hi, setHi] = useState(0);
+  const [retry, setRetry] = useState(0);
   const box = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
 
@@ -85,7 +86,7 @@ export function LocationField({ value, onChange, label, variant = 'light', class
       ctl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, online]);
+  }, [q, online, retry]);
 
   const items = [...local, ...remote];
 
@@ -97,8 +98,10 @@ export function LocationField({ value, onChange, label, variant = 'light', class
       try {
         pt = await resolvePoint(p);
       } catch {
+        // Google yanıt vermedi: aynı aramayı ücretsiz servisle yenile
         setLocating(false);
-        setMsg(t('locNoResult'));
+        setRemote([]);
+        setRetry((n) => n + 1);
         return;
       }
       setLocating(false);

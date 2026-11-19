@@ -1,5 +1,5 @@
 import type { AppState, Location, Point } from '../types';
-import { loadGoogle, usingGoogle } from './gmaps';
+import { loadGoogle, markGoogleDown, usingGoogle } from './gmaps';
 
 /** İki nokta arası kuş uçuşu mesafe (km) */
 export function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
@@ -135,12 +135,22 @@ async function searchGoogle(s: AppState, q: string, lang: string): Promise<Point
 /** Google önerisinin koordinatını çözer (seçim anında, tek istek). */
 export async function resolvePoint(p: Point): Promise<Point> {
   if (!p.placeId || Number.isFinite(p.lat)) return p;
-  await loadGoogle();
+  try {
+    await loadGoogle();
+  } catch (e) {
+    markGoogleDown();
+    throw e;
+  }
   const pred = gPreds.get(p.placeId);
   const { Place } = (await google.maps.importLibrary('places')) as google.maps.PlacesLibrary;
   const place = pred ? pred.toPlace() : new Place({ id: p.placeId });
   // Yalnızca koordinat (Essentials). displayName istemek 'Pro' ücret sınıfına geçirir; ad zaten öneriden geliyor.
-  await place.fetchFields({ fields: ['location', 'formattedAddress'] });
+  try {
+    await place.fetchFields({ fields: ['location', 'formattedAddress'] });
+  } catch (e) {
+    markGoogleDown();
+    throw e;
+  }
   gToken = null; // oturum seçimle kapanır
   const loc = place.location;
   if (!loc) throw new Error('Konum bulunamadı');
@@ -161,9 +171,15 @@ const curLang = () => (typeof document !== 'undefined' ? document.documentElemen
 
 export async function searchRemote(s: AppState, q: string, signal?: AbortSignal): Promise<Point[]> {
   if (usingGoogle()) {
-    const r = await searchGoogle(s, q, curLang());
-    if (signal?.aborted) throw new Error('aborted');
-    return r;
+    try {
+      const r = await searchGoogle(s, q, curLang());
+      if (signal?.aborted) throw new Error('aborted');
+      return r;
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      // Kota doldu / anahtar sorunu: bu aramayı ücretsiz servisle yap
+      markGoogleDown();
+    }
   }
   const { mapLat, mapLng, searchBbox } = s.settings;
   const u = new URLSearchParams({ q, limit: '8', lat: String(mapLat), lon: String(mapLng) });
@@ -186,9 +202,10 @@ export async function reverseGeocode(lat: number, lng: number): Promise<Point> {
   const fallback: Point = { label: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, lat, lng, kind: 'gps' };
   if (usingGoogle()) {
     try {
-      return (await reverseGoogle(lat, lng, curLang())) ?? fallback;
+      const g = await reverseGoogle(lat, lng, curLang());
+      if (g) return g;
     } catch {
-      return fallback;
+      /* Google adres çözemedi (ör. demo anahtar kapsamı): ücretsiz servisle dene */
     }
   }
   try {
