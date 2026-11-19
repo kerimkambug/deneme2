@@ -2122,3 +2122,31 @@ body:has(.drv) {
   color: var(--muted);
   font-size: 12px;
 }
+
+/* Yedek listesi */
+.bk-list {
+  border: 1px solid var(--a-line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.bk-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--a-line);
+}
+.bk-row:first-child {
+  border-top: 0;
+}
+.bk-row > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.bk-row small {
+  color: var(--a-muted, #777);
+  font-size: 12.5px;
+}

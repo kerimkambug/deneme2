@@ -38,7 +38,7 @@ Henüz eklenemeyenler ve nedenleri: **[TODO.md](TODO.md)**.
 - **Kurallar:** gidiş-dönüş indirimi, gece ücreti, ücretsiz bekleme, en erken rezervasyon süresi, döviz kurları, ödeme yöntemleri
 - **Ekstralar:** bebek koltuğu, ara durak, çiçek… (fiyat, adet)
 - **İçerik:** başlıklar, hizmetler, rakamlar, yorumlar, SSS, hakkımızda — hepsi 3 dilde; logo, arka plan görselleri, vurgu rengi
-- **Firma:** iletişim, WhatsApp, belge no, Instagram, panel şifresi, yedek al/yükle
+- **Firma:** iletişim, WhatsApp, belge no, Instagram, panel şifresi, tam yedek (indir / geri yükle; şifreler, mesajlar, kasa dahil) ve her gece otomatik yedek (son 7 gün)
 
 ## Geliştirme
 ```bash
@@ -66,7 +66,7 @@ Sunucu modunda veriler Render'daki PostgreSQL'de durur; müşteri, patron ve şo
 | `ADMIN_PASSWORD` | İlk panel şifresi (sonra panelden değiştirilebilir) |
 | `SEED_DEMO` | `1` ise ilk açılışta örnek şoför ve rezervasyonlar yüklenir (gerçek kurulumda eklemeyin) |
 
-Ücretsiz planda servis 15 dk kullanılmazsa uyur (ilk açılış ~30-50 sn) Canlı kullanım için Starter servis önerilir. Atlas'ın ücretsiz M0 paketinde otomatik yedek yoktur.
+Ücretsiz planda servis 15 dk kullanılmazsa uyur (ilk açılış ~30-50 sn) Canlı kullanım için Starter servis önerilir. Atlas'ın ücretsiz M0 paketinde otomatik yedek yoktur; sistemin kendi gece yedeği aynı veritabanında durur, bu yüzden ayda bir panelden “Tam yedek indir” ile bilgisayara da alın.
 
 Yerelde sunucu modu: `npm run build:remote && ADMIN_PASSWORD=gizli123 npm start` → http://localhost:8080 (DATABASE_URL yoksa veriler `data/db.json` dosyasına yazılır).
 

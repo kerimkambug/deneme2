@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { Download, Upload, RotateCcw } from 'lucide-react';
 import { REMOTE, exportJson, importJson, resetDemo, storageUsageKb, update, useStore } from '../../data/store';
 import type { Settings } from '../../types';
+import { ServerBackups } from './ServerBackups';
 import { Field, ImageInput, L10nInput, PageHead, toast } from './ui';
 
 export function SettingsPage() {
@@ -72,6 +73,7 @@ export function SettingsPage() {
         </Field>
       </div>
 
+      {REMOTE ? <ServerBackups /> : (
       <div className="apanel">
         <h4>Yedekleme</h4>
         <p className="muted small">{REMOTE ? 'Veriler sunucuda saklanır. Yedek dosyasıyla tüm ayarları ve rezervasyonları indirip saklayabilirsiniz.' : `Bu demo sürüm verileri tarayıcıda saklar (${storageUsageKb()} KB kullanılıyor). Yedek dosyasıyla tüm ayarlarınızı başka bir cihaza taşıyabilirsiniz.`}</p>
@@ -98,6 +100,7 @@ export function SettingsPage() {
           />
         </div>
       </div>
+      )}
     </>
   );
 }

@@ -8,6 +8,7 @@ Bu liste, sistemde **şu an eklenemeyen** işleri içerir. Her maddede neden bek
 
 ## A. Canlıya geçmeden önce (öncelikli)
 
+- ☐ 🗄️ **Gece yedeğini site dışına göndermek** (e-posta / Google Drive): şu an gece yedekleri aynı veritabanında saklanıyor; veritabanı kaybına karşı koruma için elle indirmek gerekiyor.
 - ☐ 💳 **Render ücretli plana geçiş**: ücretsiz servis 15 dk sonra uyur (ilk açılış 30-50 sn), ücretsiz veritabanı **30 gün sonra silinir**. Starter servis + Basic PostgreSQL (≈ 14 $/ay). Ücretli veritabanında günlük otomatik yedek de gelir.
 - ☐ 💳 **Alan adı** (`firmaadi.com`): satın alınıp Render'a bağlanmalı (Render → Settings → Custom Domain). Ardından Google Maps anahtarı kısıtlamasına yeni adres eklenmeli.
 - ☐ ⏳ **Gerçek içerik** (müşteriden): logo, araç fotoğrafları, firma unvanı/adres/telefon, D2 belge no, gerçek fiyat listesi; örnek yorumlar ve "12.500+ misafir" gibi örnek rakamlar silinmeli/değiştirilmeli.

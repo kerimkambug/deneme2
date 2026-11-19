@@ -281,6 +281,7 @@ function connectWs(s: Scope) {
   sock.onmessage = (ev) => {
     if (scopeKey(scope) !== scopeKey(s)) return;
     const m = JSON.parse(ev.data);
+    if (m.t === 'reload') return void setTimeout(() => location.reload(), 300);
     if (m.t === 'config') state = { ...state, ...m.data };
     else if (m.t === 'booking') {
       const i = state.bookings.findIndex((b) => b.id === m.data.id);
@@ -412,6 +413,11 @@ export async function driverLogin(driverId: string, pin: string): Promise<string
 /** Oturumlu POST (bildirim aboneliği vb.) */
 export function authedPost(r: 'admin' | 'driver', url: string, body: unknown) {
   return api('POST', url, body, getToken(r));
+}
+
+/** Oturumlu GET (yedek listesi vb.) */
+export function authedGet<T>(r: 'admin' | 'driver', url: string) {
+  return api<T>('GET', url, undefined, getToken(r));
 }
 
 export function hasToken(r: 'admin' | 'driver') {

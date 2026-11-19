@@ -8,6 +8,7 @@ import { quote } from '../src/lib/pricing';
 import { haversineKm, resolveZone } from '../src/lib/geo';
 import type { AppState, Booking, BookingStatus, Driver, Expense, ExpenseType, LiveLoc, Settlement } from '../src/types';
 import { CONFIG_KEYS, createStore, type Config, type CustomerRec } from './db';
+import { istanbulDate, istanbulHour, validateBackup, type BackupInfo, type FullBackup } from './backup';
 import { addSub, initPush, notify, removeSub, vapidPublicKey } from './push';
 import { CHAT_MAX, chatOpen, quickText, type Chat, type ChatMsg } from '../src/lib/chat';
 import { checkPassword, clearFails, hashPassword, noteFail, rateLimited, sign, verify, type TokenData } from './auth';
@@ -112,6 +113,7 @@ async function boot() {
   await initPush(store);
   ledger = (await store.getKv<typeof ledger>('ledger')) ?? { expenses: [], settlements: [] };
   void purgeOldChats();
+  setTimeout(() => void nightlyBackup(), 60e3);
   if (!(await store.getAdminHash())) {
     await store.setAdminHash(hashPassword(process.env.ADMIN_PASSWORD || 'admin123'));
     if (!process.env.ADMIN_PASSWORD) console.warn('[boot] ADMIN_PASSWORD yok, panel şifresi: admin123');
@@ -626,6 +628,142 @@ async function purgeOldChats() {
   }
 }
 setInterval(() => void purgeOldChats().catch(() => undefined), 6 * 3600e3);
+
+// --- Tam yedekleme
+const KV_KEYS = ['vapid', 'push-subs', 'ledger'] as const;
+const KEEP_AUTO = 7;
+
+async function buildBackup(reason: string): Promise<FullBackup> {
+  const kv: Record<string, unknown> = {};
+  for (const k of KV_KEYS) {
+    const v = await store.getKv(k);
+    if (v != null) kv[k] = v;
+  }
+  const chatMap: Record<string, Chat> = {};
+  for (const b of bookings.values()) {
+    const c = chats.get(b.id) ?? (await store.getKv<Chat>(chatKey(b.id)));
+    if (c && c.messages.length) chatMap[b.id] = c;
+  }
+  return {
+    format: 'vip-transfer-backup',
+    version: 1,
+    createdAt: new Date().toISOString(),
+    reason,
+    config: { ...config, settings: { ...config.settings, adminPassword: '' } },
+    bookings: [...bookings.values()],
+    customers: [...customers.values()],
+    adminHash: await store.getAdminHash(),
+    migrations: await store.getMigrations(),
+    kv,
+    chats: chatMap,
+  };
+}
+
+const backupIndex = async () => (await store.getKv<BackupInfo[]>('backup-index')) ?? [];
+
+/** Yedeği veritabanında saklar; eskileri siler (otomatik olanlardan son 7'si, elle alınanlardan son 10'u kalır). */
+async function saveBackup(reason: string): Promise<BackupInfo> {
+  const data = await buildBackup(reason);
+  const json = JSON.stringify(data);
+  if (json.length > 15 * 1024 * 1024) throw new Error('Yedek 15 MB’ı aşıyor; veritabanında saklanamadı. “Tam yedek indir” ile bilgisayara alın.');
+  const info: BackupInfo = { id: 'bk_' + Date.now().toString(36), at: data.createdAt, reason, size: json.length, bookings: data.bookings.length, customers: data.customers.length };
+  await store.setKv(`backup:${info.id}`, data);
+  let idx = [info, ...(await backupIndex())];
+  const auto = idx.filter((x) => x.reason === 'gece');
+  const other = idx.filter((x) => x.reason !== 'gece');
+  const drop = [...auto.slice(KEEP_AUTO), ...other.slice(10)];
+  for (const d of drop) await store.setKv(`backup:${d.id}`, null);
+  idx = idx.filter((x) => !drop.some((d) => d.id === x.id));
+  await store.setKv('backup-index', idx);
+  return info;
+}
+
+/** Yedeği geri yükler: her şey dosyadaki hale döner. */
+async function restoreBackup(b: FullBackup) {
+  // Önce şimdiki durumun yedeği
+  await saveBackup('geri yükleme öncesi');
+  const keepPw = config.settings.adminPassword;
+  config = { ...b.config, settings: { ...b.config.settings, adminPassword: keepPw } } as Config;
+  await store.setConfig(config);
+  const keepIds = new Set(b.bookings.map((x) => x.id));
+  for (const old of [...bookings.values()]) {
+    if (!keepIds.has(old.id)) await store.deleteBooking(old.id);
+    await store.setKv(chatKey(old.id), { messages: [], read: {} });
+  }
+  bookings.clear();
+  for (const x of b.bookings) {
+    bookings.set(x.id, x);
+    await store.upsertBooking(x);
+  }
+  const keepCust = new Set(b.customers.map((x) => x.id));
+  for (const old of [...customers.values()]) if (!keepCust.has(old.id)) await store.deleteCustomer(old.id);
+  customers.clear();
+  for (const c of b.customers) {
+    customers.set(c.id, c);
+    await store.upsertCustomer(c);
+  }
+  if (b.adminHash) await store.setAdminHash(b.adminHash);
+  const done = await store.getMigrations();
+  for (const m of b.migrations ?? []) if (!done.includes(m)) await store.addMigration(m);
+  for (const k of KV_KEYS) if (b.kv[k] != null) await store.setKv(k, b.kv[k]);
+  ledger = (b.kv.ledger as typeof ledger) ?? { expenses: [], settlements: [] };
+  chats.clear();
+  for (const [id, c] of Object.entries(b.chats)) {
+    chats.set(id, c);
+    await store.setKv(chatKey(id), c);
+  }
+  for (const id of Object.keys(live)) delete live[id];
+  await initPush(store);
+  broadcastConfig();
+  // Açık panelleri ve ekranları yeniden yüklet
+  for (const c of clients) send(c, { t: 'reload' });
+}
+
+app.get('/api/admin/backup', auth('admin'), wrap(async (_req, res) => {
+  const data = await buildBackup('elle indirildi');
+  res.setHeader('Content-Disposition', `attachment; filename="vip-transfer-yedek-${istanbulDate()}.json"`);
+  res.json(data);
+}));
+app.post('/api/admin/restore', auth('admin'), wrap(async (req, res) => {
+  const err = validateBackup(req.body);
+  if (err) return res.status(400).json({ error: err });
+  await restoreBackup(req.body as FullBackup);
+  res.json({ ok: true });
+}));
+app.get('/api/admin/backups', auth('admin'), wrap(async (_req, res) => res.json(await backupIndex())));
+app.post('/api/admin/backups', auth('admin'), wrap(async (_req, res) => {
+  try {
+    res.json(await saveBackup('elle'));
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+}));
+app.get('/api/admin/backups/:id', auth('admin'), wrap(async (req, res) => {
+  const data = await store.getKv<FullBackup>(`backup:${req.params.id}`);
+  if (!data) return res.status(404).json({ error: 'Yedek bulunamadı' });
+  res.setHeader('Content-Disposition', `attachment; filename="vip-transfer-yedek-${data.createdAt.slice(0, 10)}.json"`);
+  res.json(data);
+}));
+app.post('/api/admin/backups/:id/restore', auth('admin'), wrap(async (req, res) => {
+  const data = await store.getKv<FullBackup>(`backup:${req.params.id}`);
+  if (!data || validateBackup(data)) return res.status(404).json({ error: 'Yedek bulunamadı' });
+  await restoreBackup(data);
+  res.json({ ok: true });
+}));
+
+// Gece yedeği: her gün Türkiye saatiyle 03:00'ten sonra bir kez
+async function nightlyBackup() {
+  const today = istanbulDate();
+  const idx = await backupIndex();
+  if (istanbulHour() < 3 || idx.some((x) => x.reason === 'gece' && istanbulDate(new Date(x.at)) === today)) return;
+  try {
+    const info = await saveBackup('gece');
+    console.log(`[yedek] gece yedeği alındı (${Math.round(info.size / 1024)} KB)`);
+  } catch (e) {
+    console.warn('[yedek] gece yedeği alınamadı:', (e as Error).message);
+  }
+}
+setInterval(() => void nightlyBackup(), 30 * 60e3);
 
 // --- Masraf ve kasa
 async function saveLedger(driverId?: string) {
