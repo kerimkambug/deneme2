@@ -53,19 +53,20 @@ Cloudflare Pages / Netlify: build komutu `npm run build`, çıktı klasörü `di
 ## Render'a kurulum (gerçek sistem)
 Sunucu modunda veriler Render'daki PostgreSQL'de durur; müşteri, patron ve şoför ekranları WebSocket ile **anlık** güncellenir.
 
-1. render.com → **New → Blueprint** → bu GitHub deposunu seçin (`render.yaml` otomatik okunur).
-2. Sorulduğunda **ADMIN_PASSWORD** (panel şifresi) girin → **Apply**.
-3. Kurulum bitince `https://vip-transfer.onrender.com` gibi bir adres verilir.
+1. MongoDB Atlas'ta bir küme açın; Network Access'e `0.0.0.0/0` ekleyin, bir veritabanı kullanıcısı oluşturun.
+2. render.com → **New → Blueprint** → bu GitHub deposunu seçin (`render.yaml` otomatik okunur).
+3. Sorulduğunda **ADMIN_PASSWORD** (panel şifresi) ve **MONGODB_URI** (Atlas adresi, sonuna `/viptransfer` eklenmiş) girin → **Apply**.
+4. Kurulum bitince `https://vip-transfer.onrender.com` gibi bir adres verilir.
 
 | Değişken | Açıklama |
 |---|---|
 | `MONGODB_URI` | MongoDB Atlas bağlantı adresi (önerilen; verilirse kullanılır) |
-| `DATABASE_URL` | Render PostgreSQL (MONGODB_URI yoksa kullanılır; varsa ilk açılışta veriler buradan MongoDB'ye taşınır) |
+| `DATABASE_URL` | İsteğe bağlı PostgreSQL (MONGODB_URI yoksa kullanılır; ikisi birden verilirse ilk açılışta veriler PostgreSQL'den MongoDB'ye taşınır) |
 | `SECRET` | Oturum imzalama anahtarı (otomatik üretilir) |
 | `ADMIN_PASSWORD` | İlk panel şifresi (sonra panelden değiştirilebilir) |
 | `SEED_DEMO` | `1` ise ilk açılışta örnek şoför ve rezervasyonlar yüklenir (gerçek kurulumda eklemeyin) |
 
-Ücretsiz planda servis 15 dk kullanılmazsa uyur (ilk açılış ~30-50 sn) ve ücretsiz veritabanı 30 gün sonra silinir. Canlı kullanım için Starter servis + Basic veritabanı önerilir.
+Ücretsiz planda servis 15 dk kullanılmazsa uyur (ilk açılış ~30-50 sn) Canlı kullanım için Starter servis önerilir. Atlas'ın ücretsiz M0 paketinde otomatik yedek yoktur.
 
 Yerelde sunucu modu: `npm run build:remote && ADMIN_PASSWORD=gizli123 npm start` → http://localhost:8080 (DATABASE_URL yoksa veriler `data/db.json` dosyasına yazılır).
 
