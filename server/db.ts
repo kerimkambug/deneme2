@@ -228,8 +228,9 @@ class MigratingStore implements Store {
 }
 
 export function createStore(): Store {
-  const mongo = process.env.MONGODB_URI;
-  const pg = process.env.DATABASE_URL;
+  // Kopyala-yapıştırda gelen baştaki/sondaki boşluklar bağlantıyı bozmasın
+  const mongo = process.env.MONGODB_URI?.trim();
+  const pg = process.env.DATABASE_URL?.trim();
   if (mongo) {
     console.log('[db] MongoDB');
     return new MigratingStore(new MongoStore(mongo), pg ? new PgStore(pg) : undefined);
