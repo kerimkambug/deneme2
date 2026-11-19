@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
+import { MongoClient, type Collection, type Db } from 'mongodb';
 import type { AppState, Booking, Customer } from '../src/types';
 
 export interface CustomerRec extends Customer {
@@ -118,13 +119,129 @@ class FileStore implements Store {
   async deleteCustomer(id: string) { delete this.data.customers?.[id]; this.save(); }
 }
 
+/* ---------------- MongoDB (Atlas) ---------------- */
+type KvDoc = { _id: string; value: unknown };
+type DataDoc<T> = { _id: string; data: T; code?: string; email?: string };
+
+class MongoStore implements Store {
+  client: MongoClient;
+  db!: Db;
+  kv!: Collection<KvDoc>;
+  bookingsCol!: Collection<DataDoc<Booking>>;
+  customersCol!: Collection<DataDoc<CustomerRec>>;
+  constructor(url: string) {
+    this.client = new MongoClient(url, { maxPoolSize: 5, serverSelectionTimeoutMS: 15000 });
+  }
+  async init() {
+    await this.client.connect();
+    // Adreste veritabanı adı yoksa 'viptransfer' kullanılır
+    this.db = this.client.db(process.env.MONGODB_DB || undefined);
+    if (this.db.databaseName === 'test') this.db = this.client.db('viptransfer');
+    this.kv = this.db.collection<KvDoc>('kv');
+    this.bookingsCol = this.db.collection<DataDoc<Booking>>('bookings');
+    this.customersCol = this.db.collection<DataDoc<CustomerRec>>('customers');
+    await this.bookingsCol.createIndex({ code: 1 }, { unique: true });
+    await this.customersCol.createIndex({ email: 1 }, { unique: true });
+  }
+  async getKv<T>(key: string) {
+    const d = await this.kv.findOne({ _id: key });
+    return (d?.value as T) ?? null;
+  }
+  async setKv(key: string, value: unknown) {
+    await this.kv.updateOne({ _id: key }, { $set: { value } }, { upsert: true });
+  }
+  getConfig() { return this.getKv<Config>('config'); }
+  setConfig(c: Config) { return this.setKv('config', c); }
+  async getAdminHash() { return (await this.getKv<{ h: string }>('admin'))?.h ?? null; }
+  setAdminHash(h: string) { return this.setKv('admin', { h }); }
+  async getMigrations() { return (await this.getKv<string[]>('migrations')) ?? []; }
+  async addMigration(name: string) { await this.setKv('migrations', [...(await this.getMigrations()), name]); }
+  async listBookings() {
+    const rows = await this.bookingsCol.find({}).toArray();
+    return rows.map((r) => r.data).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
+  }
+  async upsertBooking(b: Booking) {
+    await this.bookingsCol.updateOne({ _id: b.id }, { $set: { code: b.code, data: b } }, { upsert: true });
+  }
+  async deleteBooking(id: string) { await this.bookingsCol.deleteOne({ _id: id }); }
+  async listCustomers() {
+    return (await this.customersCol.find({}).toArray()).map((r) => r.data);
+  }
+  async upsertCustomer(c: CustomerRec) {
+    await this.customersCol.updateOne({ _id: c.id }, { $set: { email: c.email, data: c } }, { upsert: true });
+  }
+  async deleteCustomer(id: string) { await this.customersCol.deleteOne({ _id: id }); }
+}
+
+/** Boş hedefe eski veritabanındaki her şeyi kopyalar (yalnızca hedef boşsa). */
+async function copyAll(from: Store, to: Store) {
+  const cfg = await from.getConfig();
+  if (!cfg) return false;
+  for (const b of await from.listBookings()) await to.upsertBooking(b);
+  for (const c of await from.listCustomers()) await to.upsertCustomer(c);
+  const admin = await from.getAdminHash();
+  if (admin) await to.setAdminHash(admin);
+  // Tek seferlik güncelleme kayıtları (depo türüne göre farklı yerde tutulur)
+  const done = await to.getMigrations();
+  for (const m of await from.getMigrations()) if (!done.includes(m)) await to.addMigration(m);
+  for (const k of ['vapid', 'push-subs', 'ledger']) {
+    const v = await from.getKv(k);
+    if (v != null) await to.setKv(k, v);
+  }
+  // sohbetler (chat:<rezervasyon id>)
+  for (const b of await from.listBookings()) {
+    const c = await from.getKv(`chat:${b.id}`);
+    if (c != null) await to.setKv(`chat:${b.id}`, c);
+  }
+  await to.setConfig(cfg); // en son: config yazılınca taşıma tamamlanmış sayılır
+  return true;
+}
+
+/** MongoDB önce init edilir; boşsa ve PostgreSQL adresi de verilmişse veriler taşınır. */
+class MigratingStore implements Store {
+  constructor(private target: Store, private source?: Store) {}
+  async init() {
+    await this.target.init();
+    if (this.source && !(await this.target.getConfig())) {
+      try {
+        await this.source.init();
+        if (await copyAll(this.source, this.target)) console.log('[db] PostgreSQL verileri MongoDB\'ye taşındı');
+      } catch (e) {
+        console.warn('[db] Eski veritabanından taşınamadı (boş başlanıyor):', (e as Error).message);
+      }
+    }
+  }
+  getConfig() { return this.target.getConfig(); }
+  setConfig(c: Config) { return this.target.setConfig(c); }
+  getAdminHash() { return this.target.getAdminHash(); }
+  setAdminHash(h: string) { return this.target.setAdminHash(h); }
+  getMigrations() { return this.target.getMigrations(); }
+  addMigration(n: string) { return this.target.addMigration(n); }
+  getKv<T>(k: string) { return this.target.getKv<T>(k); }
+  setKv(k: string, v: unknown) { return this.target.setKv(k, v); }
+  listBookings() { return this.target.listBookings(); }
+  upsertBooking(b: Booking) { return this.target.upsertBooking(b); }
+  deleteBooking(id: string) { return this.target.deleteBooking(id); }
+  listCustomers() { return this.target.listCustomers(); }
+  upsertCustomer(c: CustomerRec) { return this.target.upsertCustomer(c); }
+  deleteCustomer(id: string) { return this.target.deleteCustomer(id); }
+}
+
 export function createStore(): Store {
-  const url = process.env.DATABASE_URL;
-  if (url) {
+  const mongo = process.env.MONGODB_URI;
+  const pg = process.env.DATABASE_URL;
+  if (mongo) {
+    console.log('[db] MongoDB');
+    return new MigratingStore(new MongoStore(mongo), pg ? new PgStore(pg) : undefined);
+  }
+  if (pg) {
     console.log('[db] PostgreSQL');
-    return new PgStore(url);
+    return new PgStore(pg);
   }
   const file = process.env.DATA_FILE || path.resolve('data/db.json');
-  console.log(`[db] JSON dosyası: ${file} (kalıcı değildir, canlıda DATABASE_URL kullanın)`);
+  console.log(`[db] JSON dosyası: ${file} (kalıcı değildir, canlıda MONGODB_URI veya DATABASE_URL kullanın)`);
   return new FileStore(file);
 }
+
+/** Testler için: verilen iki depo arasında taşıma */
+export const _test = { copyAll, MigratingStore, MongoStore, FileStore };

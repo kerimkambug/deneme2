@@ -15,6 +15,10 @@ services:
         generateValue: true
       - key: ADMIN_PASSWORD
         sync: false
+      # MongoDB Atlas bağlantısı (önerilen). Panelden girilir, dosyaya yazılmaz.
+      - key: MONGODB_URI
+        sync: false
+      # Eski Render PostgreSQL: MONGODB_URI verilince ilk açılışta veriler buradan MongoDB'ye taşınır
       - key: DATABASE_URL
         fromDatabase:
           name: vip-transfer-db

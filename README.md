@@ -59,7 +59,8 @@ Sunucu modunda veriler Render'daki PostgreSQL'de durur; müşteri, patron ve şo
 
 | Değişken | Açıklama |
 |---|---|
-| `DATABASE_URL` | Render veritabanından otomatik gelir |
+| `MONGODB_URI` | MongoDB Atlas bağlantı adresi (önerilen; verilirse kullanılır) |
+| `DATABASE_URL` | Render PostgreSQL (MONGODB_URI yoksa kullanılır; varsa ilk açılışta veriler buradan MongoDB'ye taşınır) |
 | `SECRET` | Oturum imzalama anahtarı (otomatik üretilir) |
 | `ADMIN_PASSWORD` | İlk panel şifresi (sonra panelden değiştirilebilir) |
 | `SEED_DEMO` | `1` ise ilk açılışta örnek şoför ve rezervasyonlar yüklenir (gerçek kurulumda eklemeyin) |
