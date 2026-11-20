@@ -94,3 +94,12 @@ Canlıya geçişte yapılacaklar:
 5. SEO: sayfa ön-render (SSG), sitemap, yapısal veri (LocalBusiness)
 
 > Başlangıçtaki firma adı, fiyatlar, rakamlar ve müşteri yorumları **örnektir**; yayına almadan önce panelden gerçekleriyle değiştirin.
+
+## SEO ve yapay zekâ uyumu
+
+- Her herkese açık sayfa sunucuda HTML olarak da üretilir (JavaScript çalıştırmayan ChatGPT/Claude/Perplexity botları içeriği görür).
+- Her sabit fiyatlı güzergâh için ayrı sayfa: `/transfer/antalya-havalimani-kemer-transfer` ("nasıl gidilir, ne kadar sürer, ücreti ne" cevaplarıyla).
+- 5 dil: `?lang=en|ru|de|pl` bağlantıları + `hreflang` etiketleri.
+- Yapılandırılmış veri (JSON-LD): firma (TravelAgency), güzergâh teklifleri (TaxiService/Offer), SSS (FAQPage), içerik yolu (BreadcrumbList).
+- `/robots.txt` (yapay zekâ botlarına açık, panel/şoför/takip kapalı), `/sitemap.xml`, `/llms.txt` (yapay zekâ için firma özeti ve fiyat listesi).
+- Kendi alan adı bağlanınca Render'a `SITE_URL=https://alanadi.com` eklenmeli.

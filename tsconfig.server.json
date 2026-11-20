@@ -4,5 +4,5 @@
     "types": ["node", "vite/client", "google.maps"],
     "noEmit": true
   },
-  "include": ["server", "src/types.ts", "src/data/seed.ts", "src/lib/pricing.ts", "src/lib/geo.ts", "src/lib/gmaps.ts", "src/lib/chat.ts", "src/lib/pool.ts"]
+  "include": ["server", "src/types.ts", "src/data/seed.ts", "src/lib/pricing.ts", "src/lib/geo.ts", "src/lib/gmaps.ts", "src/lib/chat.ts", "src/lib/pool.ts", "src/lib/seo.ts"]
 }

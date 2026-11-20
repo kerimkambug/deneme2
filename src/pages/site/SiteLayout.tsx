@@ -8,9 +8,12 @@ import { usePrefs, useT } from '../../lib/prefs';
 import { LANG_LABEL } from '../../lib/i18n';
 import { CURRENCIES, LANGS } from '../../types';
 import { telLink, waLink } from '../../lib/format';
+import { publicRoutes, routeSlug, routeTexts } from '../../lib/seo';
 
 export function SiteLayout() {
   const s = useStore((x) => x.settings);
+  const st = useStore((x) => x);
+  const routeLinks = publicRoutes(st).slice(0, 16);
   const { t } = useT();
   const { lang, setLang, currency, setCurrency } = usePrefs();
   const [open, setOpen] = useState(false);
@@ -30,8 +33,9 @@ export function SiteLayout() {
     setOpen(false);
   }, [loc.pathname, loc.hash]);
   useEffect(() => {
-    document.title = `${s.companyName} | ${s.tagline[lang]}`;
-  }, [s.companyName, s.tagline, lang]);
+    // Güzergâh sayfaları kendi başlığını koyar
+    if (!loc.pathname.startsWith('/transfer/')) document.title = `${s.companyName} | ${s.tagline[lang]}`;
+  }, [s.companyName, s.tagline, lang, loc.pathname]);
   useEffect(() => {
     document.documentElement.style.setProperty('--accent', s.accent);
   }, [s.accent]);
@@ -189,6 +193,11 @@ export function SiteLayout() {
             </ul>
           </div>
         </div>
+        {routeLinks.length > 0 && (
+          <nav className="wrap ftr-routes" aria-label="Transfer">
+            {routeLinks.map((r) => <Link key={r.id} to={`/transfer/${routeSlug(st, r)}`}>{routeTexts(st, r, lang).h1}</Link>)}
+          </nav>
+        )}
         <div className="wrap ftr-bottom">
           <span>
             © {new Date().getFullYear()} {s.companyName}. {t('rights')}

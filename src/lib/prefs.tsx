@@ -29,7 +29,19 @@ function detectLang(): Lang {
 const DEFAULT_CURRENCY: Record<Lang, Currency> = { tr: 'TRY', en: 'EUR', ru: 'EUR', de: 'EUR', pl: 'EUR' };
 
 export function PrefsProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>(() => read('vip:lang', LANGS, detectLang()));
+  const [lang, setLangState] = useState<Lang>(() => {
+    // ?lang=en bağlantısı (arama motoru / paylaşılan link) her şeyden önce gelir
+    const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('lang') : null;
+    if (q && (LANGS as readonly string[]).includes(q)) {
+      try {
+        localStorage.setItem('vip:lang', q);
+      } catch {
+        /* yok say */
+      }
+      return q as Lang;
+    }
+    return read('vip:lang', LANGS, detectLang());
+  });
   const [currency, setCurState] = useState<Currency>(() => read('vip:cur', CURRENCIES, DEFAULT_CURRENCY[lang]));
 
   useEffect(() => {

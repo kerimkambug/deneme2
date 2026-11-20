@@ -8,6 +8,7 @@ import { Booking } from './pages/site/Booking';
 import { Track } from './pages/site/Track';
 import { Account } from './pages/site/Account';
 import { Privacy } from './pages/site/Privacy';
+import { TransferRoute } from './pages/site/TransferRoute';
 import { Customers } from './pages/admin/Customers';
 import { Cash } from './pages/admin/Cash';
 import { Reports } from './pages/admin/Reports';
@@ -55,6 +56,7 @@ export function App() {
             <Route path="takip/:code" element={<Track />} />
             <Route path="hesap" element={<Account />} />
             <Route path="gizlilik" element={<Privacy />} />
+            <Route path="transfer/:slug" element={<TransferRoute />} />
           </Route>
           <Route path="panel" element={<AdminLayout />}>
             <Route index element={<Dashboard />} />

@@ -9,6 +9,7 @@ import { haversineKm, resolveZone } from '../src/lib/geo';
 import type { AppState, Booking, BookingStatus, Driver, Expense, ExpenseType, LiveLoc, Settlement } from '../src/types';
 import { CONFIG_KEYS, createStore, type Config, type CustomerRec } from './db';
 import { istanbulDate, istanbulHour, validateBackup, type BackupInfo, type FullBackup } from './backup';
+import { baseUrl, llmsTxt, renderHtml, robotsTxt, sitemapXml } from './seo';
 import { addSub, initPush, notify, removeSub, vapidPublicKey } from './push';
 import { eligible, needsPatron, poolOpen, toPoolItem, type PoolItem } from '../src/lib/pool';
 import { CHAT_MAX, chatOpen, quickText, type Chat, type ChatMsg } from '../src/lib/chat';
@@ -990,17 +991,19 @@ const indexHtml = () => {
 };
 const escapeJson = (o: unknown) => JSON.stringify(o).replace(/</g, '\\u003c');
 
+app.get('/robots.txt', (req, res) => res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(robotsTxt(baseUrl(req))));
+app.get('/sitemap.xml', (req, res) => res.type('application/xml').set('Cache-Control', 'public, max-age=3600').send(sitemapXml(config, baseUrl(req))));
+app.get(['/llms.txt', '/llms-full.txt'], (req, res) => res.type('text/markdown; charset=utf-8').set('Cache-Control', 'public, max-age=3600').send(llmsTxt(config, baseUrl(req))));
+
 app.use('/assets', express.static(path.join(DIST, 'assets'), { immutable: true, maxAge: '1y' }));
 app.use(express.static(DIST, { index: false, maxAge: '1h' }));
-app.get(/^(?!\/api\/).*/, (_req, res) => {
+app.get(/^(?!\/api\/).*/, (req, res) => {
   const html = indexHtml();
   if (!html) return res.status(500).send('Site derlenmemiş: önce "npm run build:remote" çalıştırın.');
-  // Açık ayarları sayfaya göm: ilk açılışta içerik beklemeden görünür
-  const s = config.settings;
-  const out = html
-    .replace(/<title>.*?<\/title>/, `<title>${s.companyName.replace(/</g, '')} | ${s.tagline.tr.replace(/</g, '')}</title>`)
-    .replace('</head>', `<script>window.__CONFIG__=${escapeJson(publicConfig())}</script></head>`);
-  res.set('Cache-Control', 'no-cache').type('html').send(out);
+  // Başlık, meta, yapılandırılmış veri ve botlar için içerik + açık ayarlar (ilk açılış beklemesin)
+  const page = renderHtml(html, config, req);
+  const out = page.html.replace('</head>', `<script>window.__CONFIG__=${escapeJson(publicConfig())}</script></head>`);
+  res.status(page.status).set('Cache-Control', 'no-cache').type('html').send(out);
 });
 
 /* ======================= Başlat ======================= */
